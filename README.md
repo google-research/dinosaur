@@ -12,6 +12,10 @@ hardware (GPU/TPU), including parallelization across multiple devices.
 
 For more details, see our paper on [Neural General Circulation Models](https://arxiv.org/abs/2311.07222).
 
+## Usage instructions
+
+Coming soon!
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details. We are open to user
