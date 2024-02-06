@@ -135,6 +135,12 @@ class ShallowWaterTest(parameterized.TestCase):
                                      velocity_function, dt, density_ratio,
                                      mean_potential, inner_steps, outer_steps):
     """Tests steady state zonal geostrophic flow."""
+
+    if not _tpu_or_gpu_available():
+      # TODO(shoyer): speed up these tests, fast enough to include in CI on
+      # GitHub!
+      raise unittest.SkipTest('test is too slow to run on CPU')
+
     grid = spherical_harmonic.Grid.with_wavenumbers(wavenumbers)
     vertical_grid = layer_coordinates.LayerCoordinates(layers)
     coords = coordinate_systems.CoordinateSystem(grid, vertical_grid)
