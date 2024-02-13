@@ -14,7 +14,13 @@ For more details, see our paper on [Neural General Circulation Models](https://a
 
 ## Usage instructions
 
-Coming soon!
+We currently have examples replicating two standard test-cases for dynamical cores:
+
+- [Baroclinic instability](https://nbviewer.org/github/google-research/dinosaur/blob/main/notebooks/baroclinic_instability.ipynb)
+- [Held-Suarez forcing](https://nbviewer.org/github/google-research/dinosaur/blob/main/notebooks/held_suarez.ipynb)
+
+We recommend running them using [Google Colab](https://colab.research.google.com/) with a GPU runtime.
+You can also install Dinosaur locally: `pip install git+https://github.com/google-research/dinosaur`
 
 ## Contributing
 
