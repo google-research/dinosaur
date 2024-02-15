@@ -2,7 +2,7 @@
 
 # Dinosaur: differentiable dynamics for global atmospheric modeling
 
-- Authors: Jamie A. Smith, Dmitrii Kochkov, Peter Norgaard, Stephan Hoyer
+Authors: Jamie A. Smith, Dmitrii Kochkov, Peter Norgaard, Stephan Hoyer
 
 Dinosaur is a spectral dynamical core for global atmospheric modeling written in
 JAX:
@@ -16,6 +16,9 @@ For more details, see our paper on [Neural General Circulation Models](https://a
 
 ## Usage instructions
 
+Dinosaur is an experimental research project that we are still working on
+documenting.
+
 We currently have examples replicating two standard test-cases for dynamical cores:
 
 - [Baroclinic instability](https://nbviewer.org/github/google-research/dinosaur/blob/main/notebooks/baroclinic_instability.ipynb)
@@ -23,6 +26,12 @@ We currently have examples replicating two standard test-cases for dynamical cor
 
 We recommend running them using [Google Colab](https://colab.research.google.com/) with a GPU runtime.
 You can also install Dinosaur locally: `pip install git+https://github.com/google-research/dinosaur`
+
+## See also
+
+If you like Dinosaur, you might also like
+[SpeedyWeather.jl](https://github.com/SpeedyWeather/SpeedyWeather.jl), which
+solves similar equations in Julia.
 
 ## Contributing
 
