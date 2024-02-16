@@ -27,6 +27,21 @@ We currently have examples replicating two standard test-cases for dynamical cor
 We recommend running them using [Google Colab](https://colab.research.google.com/) with a GPU runtime.
 You can also install Dinosaur locally: `pip install git+https://github.com/google-research/dinosaur`
 
+## Docs
+
+To build documentation for the site, you need to install the optional `docs` dependencies of the project.
+
+```sh
+pip install -e '.[docs]'
+```
+
+Once the dependencies are installed, you can run the following commands to generate the documentation.
+
+```sh
+sphinx-apidoc dinosaur/ -o docs/source
+sphinx-build docs/source docs/build
+```
+
 ## See also
 
 If you like Dinosaur, you might also like
