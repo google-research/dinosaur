@@ -282,8 +282,20 @@ def _infer_dims_shape_and_coords(
   for dim, value in additional_coords.items():
     if dim == XR_REALIZATION_NAME:
       continue  # Handled in _maybe_update_shape_and_dim_with_time_sample
+    if value.ndim != 1:
+      raise ValueError(
+          '`additional_coords` must be 1d vectors, but got: '
+          f'{value.shape=} for {dim=}'
+      )
+    if value.shape == (coords.vertical.layers,):
+      raise ValueError(
+          f'`additional_coords` {dim=} has shape={value.shape} that collides '
+          f'with {XR_LEVEL_NAME=}. Since matching of axes is done using shape, '
+          'consider renaming after the fact.'
+      )
     basic_shape_to_dims[value.shape + modal_shape] = (dim,) + MODAL_AXES_NAMES
     basic_shape_to_dims[value.shape + nodal_shape] = (dim,) + NODAL_AXES_NAMES
+    basic_shape_to_dims[value.shape] = (dim,)
 
   update_shape_dims_fn = functools.partial(
       _maybe_update_shape_and_dim_with_realization_time_sample,
