@@ -22,7 +22,6 @@ import chex
 from dinosaur import jax_numpy_utils
 
 import jax
-import jax.config
 import numpy as np
 
 
