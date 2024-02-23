@@ -35,7 +35,7 @@ def _assert_increasing(x: typing.Array):
 
 
 def _latitude_cell_bounds(x):
-  pi_over_2 = jnp.array([np.pi / 2], dtype=x.dtype)
+  pi_over_2 = jnp.array([np.pi / 2])
   return jnp.concatenate([-pi_over_2, (x[:-1] + x[1:]) / 2, pi_over_2])
 
 
