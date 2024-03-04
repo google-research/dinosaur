@@ -28,13 +28,14 @@ from dinosaur import spherical_harmonic
 from dinosaur import typing
 from dinosaur import vertical_interpolation
 from dinosaur import weatherbench_utils
-
 import fsspec
 import jax
 import numpy as np
 import pandas as pd
+from sklearn import neighbors
 import xarray
 import xarray_tensorstore
+
 
 # pylint: disable=g-bare-generic
 # pylint: disable=line-too-long
@@ -1013,3 +1014,67 @@ def temperature_variation_to_absolute(
     return temperature_variation + ref_temperature[:, np.newaxis, np.newaxis]
   else:
     raise ValueError(f'{temperature_variation.ndim=}, while expecting 3|4.')
+
+
+def fill_nan_with_nearest(dataset: xarray.Dataset) -> xarray.Dataset:
+  """Replaces nan values in `dataset` with nearest horizontal value."""
+
+  def fill_nan_for_array(array: xarray.DataArray) -> xarray.DataArray:
+    if array.chunks:
+      raise ValueError(
+          f'Expected data to be loaded in memory, got chunks = {array.chunks}'
+      )
+
+    extra_dims = set(array.dims) - {'latitude', 'longitude'}
+    isnan_mask = array.isnull().any(list(extra_dims))
+    anynan_mask = array.isnull().all(list(extra_dims))
+    if not isnan_mask.equals(anynan_mask):
+      raise ValueError('NaN mask is not fixed')
+
+    lat, lon = xarray.broadcast(array.latitude, array.longitude)
+    # Shape lat, lon to match order of dims in data var
+    lat = lat.transpose(*isnan_mask.dims)
+    lon = lon.transpose(*isnan_mask.dims)
+
+    # index_coords store have non-nan values, query_coords have nan values
+    index_coords = np.deg2rad(
+        np.stack(
+            [lat.data[~isnan_mask.data], lon.data[~isnan_mask.data]], axis=-1
+        )
+    )
+    query_coords = np.deg2rad(
+        np.stack(
+            [lat.data[isnan_mask.data], lon.data[isnan_mask.data]], axis=-1
+        )
+    )
+
+    # construct a BallTree to find nearest neighbor on the surface of a sphere
+    tree = neighbors.BallTree(index_coords, metric='haversine')
+    indices = tree.query(query_coords, return_distance=False).squeeze(axis=-1)
+
+    # Replace nan values (target) with nearest non-nan value (source)
+    source_lats = xarray.DataArray(
+        lat.data[~isnan_mask.data][indices], dims=['query']
+    )
+    source_lons = xarray.DataArray(
+        lon.data[~isnan_mask.data][indices], dims=['query']
+    )
+    target_lats = xarray.DataArray(lat.data[isnan_mask.data], dims=['query'])
+    target_lons = xarray.DataArray(lon.data[isnan_mask.data], dims=['query'])
+
+    array = array.copy(deep=True)
+    array.loc[{'latitude': target_lats, 'longitude': target_lons}] = array.loc[
+        {'latitude': source_lats, 'longitude': source_lons}
+    ]
+    return array
+
+  filled_arrays = {}
+  for k, v in dataset.data_vars.items():
+    if 'time' not in v.dims:
+      continue
+    if v.isel(time=0).isnull().all():
+      raise ValueError(f'DataArray {k} has all nan values for isel(time=0)')
+    if v.isnull().any():
+      array = v.copy(deep=True)
+      filled_arrays[k] = fill_nan_for_array(array.compute())
+  return dataset.assign(filled_arrays)

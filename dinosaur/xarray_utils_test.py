@@ -569,6 +569,64 @@ class XarrayUtilsTest(parameterized.TestCase):
       )
       xarray.testing.assert_equal(shifted_ds, expected_shifted_ds)
 
+  @parameterized.parameters(
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.T21(),
+              vertical_interpolation.PressureCoordinates([50, 100, 800]),
+          )
+      ),
+  )
+  def test_fill_nan_nearest(self, coords):
+    times = np.arange(2)
+    rng = np.random.default_rng(seed=0)
+    with_valid_nan = rng.random(times.shape + coords.horizontal.nodal_shape)
+    with_valid_nan[:, 10:15, 3] = np.nan  # longitude nan slice.
+    data_dict = {
+        'u': rng.random(times.shape + coords.nodal_shape),
+        'v': rng.random(times.shape + coords.nodal_shape),
+        'with_nan': with_valid_nan,
+    }
+    ds_with_nan = xarray_utils.data_to_xarray(
+        data_dict, coords=coords, times=times)
+    ds_with_nan = ds_with_nan.rename({'lon': 'longitude', 'lat': 'latitude'})
+    filled_ds = xarray_utils.fill_nan_with_nearest(ds_with_nan)
+    with self.subTest('correct_along_longitude'):
+      # longitude neighbors are closest on the outside of the nan slice.
+      np.testing.assert_allclose(
+          filled_ds.with_nan.values[:, 10, 3], with_valid_nan[:, 9, 3])
+      np.testing.assert_allclose(
+          filled_ds.with_nan.values[:, 14, 3], with_valid_nan[:, 15, 3])
+    with self.subTest('correct_along_latitude'):
+      # in the center upper latitude neighbor is closest.
+      np.testing.assert_allclose(
+          filled_ds.with_nan.values[:, 12, 3], with_valid_nan[:, 12, 2])
+    with self.subTest('raises_on_non_stationary_mask'):
+      with_invalid_nan = rng.random(times.shape + coords.horizontal.nodal_shape)
+      with_invalid_nan[:, 10, 3] = np.array([0, np.nan])
+      data_dict = {
+          'u': rng.random(times.shape + coords.nodal_shape),
+          'v': rng.random(times.shape + coords.nodal_shape),
+          'with_nan': with_invalid_nan,
+      }
+      ds_with_invalid_nan = xarray_utils.data_to_xarray(
+          data_dict, coords=coords, times=times)
+      with self.assertRaisesRegex(ValueError, 'NaN mask is not fixed'):
+        xarray_utils.fill_nan_with_nearest(ds_with_invalid_nan)
+    with self.subTest('raises_on_all_nan'):
+      with_invalid_nan = rng.random(times.shape + coords.horizontal.nodal_shape)
+      with_invalid_nan[0, ...] = np.nan * with_invalid_nan[0, ...]
+      data_dict = {
+          'u': rng.random(times.shape + coords.nodal_shape),
+          'v': rng.random(times.shape + coords.nodal_shape),
+          'with_nan': with_invalid_nan,
+      }
+      ds_with_invalid_nan = xarray_utils.data_to_xarray(
+          data_dict, coords=coords, times=times)
+      with self.assertRaisesRegex(
+          ValueError, 'DataArray with_nan has all nan values for'):
+        xarray_utils.fill_nan_with_nearest(ds_with_invalid_nan)
+
 
 if __name__ == '__main__':
   absltest.main()
