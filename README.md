@@ -2,7 +2,7 @@
 
 # Dinosaur: differentiable dynamics for global atmospheric modeling
 
-Authors: Jamie A. Smith, Dmitrii Kochkov, Peter Norgaard, Stephan Hoyer
+Authors: Jamie A. Smith, Dmitrii Kochkov, Peter Norgaard, Janni Yuval, Stephan Hoyer
 
 Dinosaur is a spectral dynamical core for global atmospheric modeling written in
 JAX:
