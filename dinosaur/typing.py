@@ -51,10 +51,23 @@ class KeyWithCosLatFactor:
 
 @tree_math.struct
 class RandomnessState:
-  core: Pytree | None = dataclasses.field(default=None)
-  nodal_value: Pytree | None = dataclasses.field(default=None)
-  modal_value: Pytree | None = dataclasses.field(default=None)
-  prng_key: PRNGKeyArray | None = dataclasses.field(default=None)
+  """Representation of random states on the sphere.
+
+  Attributes:
+    core: internal representation of the random state.
+    nodal_value: random field values in the nodal representation.
+    modal_value: random field values in the modal representation.
+    prng_key: underlying PRNG key.
+    prng_step: optional iteration counter associated with PRNG key access, to
+      allow for avoiding the pattern of iterative splitting the same key, which
+      has poor statistical properties. The recommended pattern for generating a
+      new PRNG key is `jax.random.fold_in(state.prng_key, state.prng_step)`.
+  """
+  core: Pytree | None = None
+  nodal_value: Pytree | None = None
+  modal_value: Pytree | None = None
+  prng_key: PRNGKeyArray | None = None
+  prng_step: int | None = None
 
 
 @tree_math.struct
