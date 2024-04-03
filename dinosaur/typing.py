@@ -54,6 +54,7 @@ class RandomnessState:
   core: Pytree | None = dataclasses.field(default=None)
   nodal_value: Pytree | None = dataclasses.field(default=None)
   modal_value: Pytree | None = dataclasses.field(default=None)
+  prng_key: PRNGKeyArray | None = dataclasses.field(default=None)
 
 
 @tree_math.struct
