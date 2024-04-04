@@ -48,12 +48,15 @@ def _with_sharding_constraint(
     sharding: jax.sharding.NamedSharding | None,
 ) -> typing.Pytree:
   """Ensure a sharing constraint on all non-scalar arrays in a pytree."""
-  if sharding is not None and len(sharding.spec) != 3:
+  if sharding is None:
+    return x  # unsharded
+
+  if len(sharding.spec) != 3:
     raise ValueError(f'partition spec does not have length 3: {sharding.spec}')
 
   def f(y: jax.Array) -> jax.Array:
-    if sharding is None:
-      return y  # unsharded
+    if y.ndim == 1 and y.dtype == jnp.uint32:
+      return y  # prng key
 
     if y.ndim not in {2, 3}:
       raise ValueError(f'can only shard 2D or 3D arrays: {y.shape=}')
