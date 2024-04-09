@@ -308,7 +308,7 @@ def _infer_dims_shape_and_coords(
   for shape, dims in basic_shape_to_dims.items():
     full_shape, full_dims = update_shape_dims_fn(shape, dims)
     shape_to_dims[full_shape] = full_dims
-  return all_xr_coords, shape_to_dims
+  return all_xr_coords, shape_to_dims  # pytype: disable=bad-return-type
 
 
 def nodal_orography_from_ds(ds: xarray.Dataset) -> typing.Array:

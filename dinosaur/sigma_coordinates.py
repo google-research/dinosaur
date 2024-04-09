@@ -168,7 +168,7 @@ def centered_difference(
   dx_axes = range(dx.ndim)
   inv_d𝜎 = 1 / coordinates.center_to_center
   inv_d𝜎_axes = [dx_axes[axis]]
-  return einsum(dx, dx_axes, inv_d𝜎, inv_d𝜎_axes, dx_axes, precision='float32')
+  return einsum(dx, dx_axes, inv_d𝜎, inv_d𝜎_axes, dx_axes, precision='float32')  # pytype: disable=bad-return-type
 
 
 @jax.named_call
