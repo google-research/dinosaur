@@ -390,12 +390,13 @@ def data_to_xarray(
   if additional_coords is None:
     additional_coords = {}
   # if XR_SURFACE_NAME is not specified manually, set by default.
-  if (isinstance(coords.vertical, sigma_coordinates.SigmaCoordinates) and
-      XR_SURFACE_NAME not in additional_coords):
+  if (coords.vertical.layers != 1) and (
+      XR_SURFACE_NAME not in additional_coords
+  ):
     additional_coords[XR_SURFACE_NAME] = np.ones(1)
-
   all_coords, shape_to_dims = _infer_dims_shape_and_coords(
-      coords, times, sample_ids, additional_coords)
+      coords, times, sample_ids, additional_coords
+  )
 
   dims_in_state = set()  # keep track which coordinates should be included.
   data_vars = {}
@@ -598,6 +599,15 @@ def xarray_to_weatherbench_data(
     Dictionary that contains atmosphere state variables in a format compatible
     with `weatherbench.State`.
   """
+  level_index = dataset['u'].dims.index('level')
+  diagnostics = {
+      k: (
+          getattr(dataset[k], values)
+          if 'level' in dataset[k].dims
+          else np.expand_dims(getattr(dataset[k], values), axis=level_index)
+      )
+      for k in diagnostics_to_include
+  }
   return weatherbench_utils.State(
       u=getattr(dataset['u'], values),
       v=getattr(dataset['v'], values),
@@ -605,8 +615,7 @@ def xarray_to_weatherbench_data(
       z=getattr(dataset['z'], values),
       sim_time=getattr(dataset['sim_time'], values),
       tracers={k: getattr(dataset[k], values) for k in tracers_to_include},
-      diagnostics={
-          k: getattr(dataset[k], values) for k in diagnostics_to_include},
+      diagnostics=diagnostics,
   ).asdict()
 
 
