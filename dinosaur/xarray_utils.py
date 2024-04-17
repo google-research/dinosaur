@@ -852,6 +852,16 @@ def datetime64_to_nondim_time(
   )
 
 
+def nondim_time_to_datetime64(
+    time: np.ndarray,
+    physics_specs: Any,
+    reference_datetime: np.datetime64,
+) -> np.ndarray:
+  """Converts `time` in datetime64 format to nondimensional sim_time."""
+  minutes = physics_specs.dimensionalize(time, scales.units.minute).magnitude
+  return reference_datetime + np.timedelta64(np.round(minutes).astype(int), 'm')
+
+
 def ds_from_path_or_aux(
     path: str,
     aux_features: typing.AuxFeatures,
