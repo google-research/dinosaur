@@ -498,6 +498,32 @@ def dynamic_covariate_data_to_xarray(
   )
 
 
+def xarray_to_data_dict(
+    dataset: xarray.Dataset,
+    *,
+    values: str = 'values',
+) -> dict[str, Any]:
+  """Convert an xarray.Dataset into a data dictionary."""
+  expected_dims = (XR_TIME_NAME, XR_LEVEL_NAME, XR_LON_NAME, XR_LAT_NAME)
+  for dim in dataset.dims:
+    if dim not in expected_dims:
+      raise ValueError(f'unexpected dimension {dim} not in {expected_dims}')
+
+  dims = tuple(dim for dim in expected_dims if dim in dataset.dims)
+  dataset = dataset.transpose(*dims)
+
+  data = {}
+  for k in dataset:
+    assert isinstance(k, str)  # satisfy pytype
+    v = getattr(dataset[k], values)
+    dims = dataset[k].dims
+    if XR_LEVEL_NAME not in dims and dims[-2:] == (XR_LON_NAME, XR_LAT_NAME):
+      # surface quantity
+      v = np.expand_dims(v, axis=-3)  # singleton dim for level
+    data[k] = v
+  return data
+
+
 def xarray_to_shallow_water_eq_data(
     dataset: xarray.Dataset,
     *,
