@@ -903,7 +903,7 @@ def nondim_time_delta_from_time_axis(
   return float(time_delta)
 
 
-def ds_with_sim_time(
+def with_sim_time(
     ds: xarray.Dataset,
     physics_specs: Any,
     reference_datetime: np.datetime64,
@@ -915,15 +915,19 @@ def ds_with_sim_time(
     nondim_time = ds.time.data
   else:
     nondim_time = datetime64_to_nondim_time(
-        ds.time.data, physics_specs, reference_datetime)
+        ds.time.data, physics_specs, reference_datetime
+    )
   # if dataset contains `sample` axis, sim_time should have it as well.
   if XR_SAMPLE_NAME in ds.coords:
     nondim_time = nondim_time[np.newaxis, ...]
     nondim_time = np.repeat(nondim_time, ds.sizes[XR_SAMPLE_NAME], 0)
-    ds['sim_time'] = ((XR_SAMPLE_NAME, XR_TIME_NAME,), nondim_time)
+    sim_time = ((XR_SAMPLE_NAME,) + ds.time.dims, nondim_time)
   else:
-    ds['sim_time'] = ((XR_TIME_NAME,), nondim_time)
-  return ds
+    sim_time = (ds.time.dims, nondim_time)
+  return ds.assign(sim_time=sim_time)
+
+
+ds_with_sim_time = with_sim_time  # deprecated alias
 
 
 def infer_longitude_offset(lon: np.ndarray | xarray.DataArray) -> float:
