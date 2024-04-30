@@ -16,7 +16,7 @@
 
 import dataclasses
 import functools
-from typing import Any, Callable, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Sequence, TypeVar
 
 from dinosaur import coordinate_systems
 from dinosaur import layer_coordinates
@@ -1066,20 +1066,37 @@ def temperature_variation_to_absolute(
     raise ValueError(f'{temperature_variation.ndim=}, while expecting 3|4.')
 
 
-def fill_nan_with_nearest(dataset: xarray.Dataset) -> xarray.Dataset:
+DatasetOrDataArray = TypeVar(
+    'DatasetOrDataArray', xarray.Dataset, xarray.DataArray
+)
+
+
+def fill_nan_with_nearest(dataset: DatasetOrDataArray) -> DatasetOrDataArray:
   """Replaces nan values in `dataset` with nearest horizontal value."""
 
   def fill_nan_for_array(array: xarray.DataArray) -> xarray.DataArray:
+
+    if 'latitude' not in array.dims and 'longitude' not in array.dims:
+      return array  # no interpolation needed for this variable
+
     if array.chunks:
       raise ValueError(
-          f'Expected data to be loaded in memory, got chunks = {array.chunks}'
+          f'Expected data to be loaded in memory, got chunks = {array.chunks}. '
+          'Consider calling .compute() first.'
       )
 
     extra_dims = list(set(array.dims) - {'latitude', 'longitude'})
     isnan_mask = array.isnull().any(extra_dims)
-    anynan_mask = array.isnull().all(extra_dims)
-    if not isnan_mask.equals(anynan_mask):
-      raise ValueError('NaN mask is not fixed')
+    allnan_mask = array.isnull().all(extra_dims)
+
+    if not isnan_mask.any():
+      return array  # shortcut
+
+    if allnan_mask.all():
+      raise ValueError('all values are NaN')
+
+    if not isnan_mask.equals(allnan_mask):
+      raise ValueError('NaN mask is not fixed across non-spatial dimensions')
 
     lat, lon = xarray.broadcast(array.latitude, array.longitude)
     # Shape lat, lon to match order of dims in data var
@@ -1118,13 +1135,12 @@ def fill_nan_with_nearest(dataset: xarray.Dataset) -> xarray.Dataset:
     ]
     return array
 
-  filled_arrays = {}
-  for k, v in dataset.data_vars.items():
-    if 'time' not in v.dims:
-      continue
-    if v.isel(time=0).isnull().all():
-      raise ValueError(f'DataArray {k} has all nan values for isel(time=0)')
-    if v.isnull().any():
-      array = v.copy(deep=True)
-      filled_arrays[k] = fill_nan_for_array(array.compute())
-  return dataset.assign(filled_arrays)
+  if 'latitude' not in dataset.dims or 'longitude' not in dataset.dims:
+    raise ValueError(
+        f'did not find latitude and longitude dimensions: {dataset}'
+    )
+
+  if isinstance(dataset, xarray.DataArray):
+    return fill_nan_for_array(dataset)
+
+  return dataset.map(fill_nan_for_array)
