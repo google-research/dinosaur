@@ -19,6 +19,7 @@ import functools
 from typing import Any, Callable, Mapping, MutableMapping, Sequence, TypeVar
 
 from dinosaur import coordinate_systems
+from dinosaur import horizontal_interpolation
 from dinosaur import layer_coordinates
 from dinosaur import primitive_equations
 from dinosaur import scales
@@ -1071,8 +1072,8 @@ DatasetOrDataArray = TypeVar(
 )
 
 
-def fill_nan_with_nearest(dataset: DatasetOrDataArray) -> DatasetOrDataArray:
-  """Replaces nan values in `dataset` with nearest horizontal value."""
+def fill_nan_with_nearest(data: DatasetOrDataArray) -> DatasetOrDataArray:
+  """Replaces NaN values with nearest horizontal values."""
 
   def fill_nan_for_array(array: xarray.DataArray) -> xarray.DataArray:
 
@@ -1135,12 +1136,62 @@ def fill_nan_with_nearest(dataset: DatasetOrDataArray) -> DatasetOrDataArray:
     ]
     return array
 
-  if 'latitude' not in dataset.dims or 'longitude' not in dataset.dims:
+  if 'latitude' not in data.dims or 'longitude' not in data.dims:
     raise ValueError(
-        f'did not find latitude and longitude dimensions: {dataset}'
+        f'did not find latitude and longitude dimensions: {data}'
     )
 
-  if isinstance(dataset, xarray.DataArray):
-    return fill_nan_for_array(dataset)
+  if isinstance(data, xarray.DataArray):
+    return fill_nan_for_array(data)
+  elif isinstance(data, xarray.Dataset):
+    return data.map(fill_nan_for_array)
+  else:
+    raise TypeError(f'data must be a DataArray or Dataset: {data}')
 
-  return dataset.map(fill_nan_for_array)
+
+def ensure_ascending_latitude(data: DatasetOrDataArray) -> DatasetOrDataArray:
+  """Returns a copy of `dataset` with ascending latitude, if possible."""
+  latitude = data.coords['latitude']
+  if (latitude.diff('latitude') > 0).all():
+    return data  # already ascending
+  elif (latitude.diff('latitude') < 0).all():
+    return data.isel(latitude=slice(None, None, -1))  # reverse
+  else:
+    raise ValueError(f'non-monotonic latitude: {latitude.data}')
+
+
+def regrid(
+    data: DatasetOrDataArray,
+    regridder: horizontal_interpolation.Regridder,
+    tolerance: float = 1e-3,
+) -> DatasetOrDataArray:
+  """Horizontally regrid a dataset."""
+
+  data = ensure_ascending_latitude(data)
+
+  old_lon = np.rad2deg(regridder.source_grid.longitudes)
+  old_lat = np.rad2deg(regridder.source_grid.latitudes)
+
+  if abs(old_lon - data.longitude.data).max() > tolerance:
+    raise ValueError(
+        'inconsistent longitude between data and source grid:'
+        f' {data.longitude.data} vs {old_lon}'
+    )
+  if abs(old_lat - data.latitude.data).max() > tolerance:
+    raise ValueError(
+        'inconsistent latitude between data and source grid:'
+        f' {data.latitude.data} vs {old_lat}'
+    )
+
+  data = xarray.apply_ufunc(
+      regridder,
+      data,
+      input_core_dims=[['longitude', 'latitude']],
+      output_core_dims=[['longitude', 'latitude']],
+      exclude_dims={'longitude', 'latitude'},
+      vectorize=True,  # loop over time & level, for lower memory usage
+  )
+  data.coords['longitude'] = np.rad2deg(regridder.target_grid.longitudes)
+  data.coords['latitude'] = np.rad2deg(regridder.target_grid.latitudes)
+
+  return data

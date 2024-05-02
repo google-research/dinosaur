@@ -21,6 +21,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 from dinosaur import coordinate_systems
+from dinosaur import horizontal_interpolation
 from dinosaur import layer_coordinates
 from dinosaur import primitive_equations
 from dinosaur import primitive_equations_states
@@ -654,6 +655,39 @@ class XarrayUtilsTest(parameterized.TestCase):
     with self.subTest('works_on_dataarray'):
       filled_u = xarray_utils.fill_nan_with_nearest(ds_with_nan.u)
       xarray.testing.assert_identical(filled_u, filled_ds.u)
+
+  def test_regrid(self):
+
+    old_coords = coordinate_systems.CoordinateSystem(
+        spherical_harmonic.Grid.TL31(),
+        vertical_interpolation.PressureCoordinates([50, 100, 150]),
+    )
+    rng = np.random.default_rng(seed=0)
+    data_dict = {
+        'u': rng.random(old_coords.nodal_shape),
+        'v': rng.random(old_coords.surface_nodal_shape),
+    }
+    ds = xarray_utils.data_to_xarray(
+        data_dict, coords=old_coords, times=None
+    ).rename({'lon': 'longitude', 'lat': 'latitude'}).squeeze('surface')
+
+    regridder = horizontal_interpolation.BilinearRegridder(
+        old_coords.horizontal,
+        spherical_harmonic.Grid.TL63(),
+    )
+    ds_regridded = xarray_utils.regrid(ds, regridder)
+    expected_sizes = {'latitude': 64, 'longitude': 128, 'level': 3}
+    self.assertEqual(ds_regridded.sizes, expected_sizes)
+
+    u_regridded = xarray_utils.regrid(ds.u, regridder)
+    xarray.testing.assert_identical(u_regridded, ds_regridded.u)
+
+    ds_flipped = ds.isel(latitude=slice(None, None, -1))
+    ds_flipped_regridded = xarray_utils.regrid(ds_flipped, regridder)
+    xarray.testing.assert_identical(ds_flipped_regridded, ds_regridded)
+
+    with self.assertRaisesRegex(ValueError, 'inconsistent latitude'):
+      xarray_utils.regrid(ds.assign(latitude=ds.latitude - 180), regridder)
 
 
 if __name__ == '__main__':
