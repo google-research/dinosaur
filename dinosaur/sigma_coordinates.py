@@ -352,14 +352,14 @@ def centered_vertical_advection(
   if w_boundary_values is None:
     w_slc_shape = _slice_shape_along_axis(w, axis)
     w_boundary_values = (
-        jnp.zeros(w_slc_shape, dtype=w.dtype),
-        jnp.zeros(w_slc_shape, dtype=w.dtype),
+        jnp.zeros(w_slc_shape, dtype=jax.dtypes.canonicalize_dtype(w.dtype)),
+        jnp.zeros(w_slc_shape, dtype=jax.dtypes.canonicalize_dtype(w.dtype)),
     )
   if dx_dsigma_boundary_values is None:
     x_slc_shape = _slice_shape_along_axis(x, axis)
     dx_dsigma_boundary_values = (
-        jnp.zeros(x_slc_shape, dtype=x.dtype),
-        jnp.zeros(x_slc_shape, dtype=x.dtype),
+        jnp.zeros(x_slc_shape, dtype=jax.dtypes.canonicalize_dtype(x.dtype)),
+        jnp.zeros(x_slc_shape, dtype=jax.dtypes.canonicalize_dtype(x.dtype)),
     )
 
   w_boundary_top, w_boundary_bot = w_boundary_values
@@ -388,14 +388,14 @@ def upwind_vertical_advection(
   """Compute vertical advection using 1st order upwinding."""
   w_slc_shape = _slice_shape_along_axis(w, axis)
   w_boundary_values = (
-      jnp.zeros(w_slc_shape, dtype=w.dtype),
-      jnp.zeros(w_slc_shape, dtype=w.dtype),
+      jnp.zeros(w_slc_shape, dtype=jax.dtypes.canonicalize_dtype(w.dtype)),
+      jnp.zeros(w_slc_shape, dtype=jax.dtypes.canonicalize_dtype(w.dtype)),
   )
 
   x_slc_shape = _slice_shape_along_axis(x, axis)
   dx_dsigma_boundary_values = (
-      jnp.zeros(x_slc_shape, dtype=x.dtype),
-      jnp.zeros(x_slc_shape, dtype=x.dtype),
+      jnp.zeros(x_slc_shape, dtype=jax.dtypes.canonicalize_dtype(x.dtype)),
+      jnp.zeros(x_slc_shape, dtype=jax.dtypes.canonicalize_dtype(x.dtype)),
   )
 
   # https://en.wikipedia.org/wiki/Upwind_scheme#Compact_form
