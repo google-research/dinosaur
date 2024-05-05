@@ -489,7 +489,7 @@ class XarrayUtilsTest(parameterized.TestCase):
       dict(time_shift_type='np'),
       dict(time_shift_type='pd'),
   )
-  def test_xarray_selective_shift(self, time_shift_type):
+  def test_selective_temporal_shift(self, time_shift_type):
     time = np.datetime64('2000-01-01') + [
         np.timedelta64(x, 'h') for x in range(5)
     ]
@@ -510,7 +510,7 @@ class XarrayUtilsTest(parameterized.TestCase):
           time_shift = np.timedelta64(0, 'h')
         case 'pd':
           time_shift = pd.Timedelta(0, 'h')
-      shifted_ds = xarray_utils.xarray_selective_shift(
+      shifted_ds = xarray_utils.selective_temporal_shift(
           input_ds, variables=['b', 'c'], time_shift=time_shift)
       xarray.testing.assert_equal(shifted_ds, input_ds)
 
@@ -522,7 +522,7 @@ class XarrayUtilsTest(parameterized.TestCase):
           time_shift = np.timedelta64(1, 'h')
         case 'pd':
           time_shift = pd.Timedelta(1, 'h')
-      shifted_ds = xarray_utils.xarray_selective_shift(
+      shifted_ds = xarray_utils.selective_temporal_shift(
           input_ds, variables=[], time_shift=time_shift)
       xarray.testing.assert_equal(shifted_ds, input_ds)
 
@@ -536,7 +536,7 @@ class XarrayUtilsTest(parameterized.TestCase):
           time_shift = np.timedelta64(1, 'h')
         case 'pd':
           time_shift = pd.Timedelta(1, 'h')
-      shifted_ds = xarray_utils.xarray_selective_shift(
+      shifted_ds = xarray_utils.selective_temporal_shift(
           input_ds, variables=['b', 'c'], time_shift=time_shift)
       expected_shifted_ds = xarray.Dataset(
           data_vars=dict(
@@ -558,7 +558,7 @@ class XarrayUtilsTest(parameterized.TestCase):
           time_shift = np.timedelta64(-2, 'h')
         case 'pd':
           time_shift = pd.Timedelta(-2, 'h')
-      shifted_ds = xarray_utils.xarray_selective_shift(
+      shifted_ds = xarray_utils.selective_temporal_shift(
           input_ds, variables=['b', 'c'], time_shift=time_shift)
       expected_shifted_ds = xarray.Dataset(
           data_vars=dict(

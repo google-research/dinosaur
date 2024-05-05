@@ -829,7 +829,7 @@ def verify_grid_consistency(
   )
 
 
-def xarray_selective_shift(
+def selective_temporal_shift(
     dataset: xarray.Dataset,
     variables: Sequence[str] = tuple(),
     time_shift: str|np.timedelta64|pd.Timedelta = '0 hour',
@@ -837,11 +837,11 @@ def xarray_selective_shift(
 ) -> xarray.Dataset:
   """Shifts specified variables in time and truncates associated time values.
 
-  As with xarray.shift(), positive values of the shift move values "to the
-  right", negative values "to the left" relative to the original dataset time
-  coordinates. This implies that specifying a positive `time_shift` will produce
-  a dataset where for each time the values of `variables` are from an earlier
-  time in the original dataset. See unit tests for examples.
+  As with `xarray.Dataset.shift()`, positive values of the shift move values
+  "to the right", negative values "to the left" relative to the original dataset
+  time coordinates. This implies that specifying a positive `time_shift` will
+  produce a dataset where for each time the values of `variables` are from an
+  earlier time in the original dataset. See unit tests for examples.
 
   Args:
     dataset: Input dataset.
@@ -874,6 +874,8 @@ def xarray_selective_shift(
     for var in variables:
       ds[var] = dataset.variables[var].isel({time_name: slice(-shift, None)})
   return ds
+
+xarray_selective_shift = selective_temporal_shift  # deprecated alias
 
 
 def datetime64_to_nondim_time(
