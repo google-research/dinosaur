@@ -48,7 +48,7 @@ def seed_stream(s):
 
 
 def shape_structure(inputs):
-  return jax.tree_map(lambda x: x.shape, inputs)
+  return jax.tree.map(lambda x: x.shape, inputs)
 
 
 class XarrayUtilsTest(parameterized.TestCase):
@@ -105,9 +105,9 @@ class XarrayUtilsTest(parameterized.TestCase):
         'test_tracer': primitive_equations_states.gaussian_scalar(
             coords, physics_specs, amplitude=0.1)
     }
-    trajectory = jax.tree_map(
+    trajectory = jax.tree.map(
         lambda *args: np.stack(args), *([state,] * time_steps))
-    batch_of_trajectories = jax.tree_map(
+    batch_of_trajectories = jax.tree.map(
         lambda *args: np.stack(args), *([trajectory,] * samples))
     expected_grid_attrs = coords.asdict()
 
@@ -176,7 +176,7 @@ class XarrayUtilsTest(parameterized.TestCase):
       }
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
-      nodal_batch_of_trajectories = jax.tree_map(
+      nodal_batch_of_trajectories = jax.tree.map(
           grid.to_nodal, batch_of_trajectories)
       ds = xarray_utils.data_to_xarray(
           nodal_batch_of_trajectories.asdict(), sample_ids=sample_ids,
@@ -226,9 +226,9 @@ class XarrayUtilsTest(parameterized.TestCase):
     state = shallow_water_states.multi_layer(
         velocity, physics_specs.densities, coords)
 
-    trajectory = jax.tree_map(
+    trajectory = jax.tree.map(
         lambda *args: np.stack(args), *([state,] * time_steps))
-    batch_of_trajectories = jax.tree_map(
+    batch_of_trajectories = jax.tree.map(
         lambda *args: np.stack(args), *([trajectory,] * samples))
     expected_grid_attrs = coords.asdict()
 
@@ -290,7 +290,7 @@ class XarrayUtilsTest(parameterized.TestCase):
       }
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
-      nodal_batch_of_trajectories = jax.tree_map(
+      nodal_batch_of_trajectories = jax.tree.map(
           grid.to_nodal, batch_of_trajectories)
       ds = xarray_utils.data_to_xarray(
           nodal_batch_of_trajectories.asdict(), sample_ids=sample_ids,

@@ -105,13 +105,13 @@ class PytreeUtilsTest(parameterized.TestCase):
     """Tests that split_along_axis, concat_along_axis return expected shapes."""
     split_a, split_b = pytree_utils.split_along_axis(pytree, idx, axis, False)
     with self.subTest('split_shape'):
-      self.assertEqual(jax.tree_leaves(split_a)[0].shape[axis], idx)
+      self.assertEqual(jax.tree.leaves(split_a)[0].shape[axis], idx)
 
     reconstruction = pytree_utils.concat_along_axis([split_a, split_b], axis)
     with self.subTest('split_concat_roundtrip'):
       chex.assert_trees_all_close(reconstruction, pytree)
 
-    same_ndims = len(set(a.ndim for a in jax.tree_leaves(reconstruction))) == 1
+    same_ndims = len(set(a.ndim for a in jax.tree.leaves(reconstruction))) == 1
     if not same_ndims:
       with self.subTest('raises_when_wrong_ndims'):
         with self.assertRaisesRegex(ValueError, 'arrays in `inputs` expected'):
@@ -120,8 +120,8 @@ class PytreeUtilsTest(parameterized.TestCase):
     with self.subTest('multiple_concat_shape'):
       arrays = [split_a, split_a, split_b, split_b]
       double_concat = pytree_utils.concat_along_axis(arrays, axis)
-      actual_shape = jax.tree_leaves(double_concat)[0].shape[axis]
-      expected_shape = jax.tree_leaves(pytree)[0].shape[axis] * 2
+      actual_shape = jax.tree.leaves(double_concat)[0].shape[axis]
+      expected_shape = jax.tree.leaves(pytree)[0].shape[axis] * 2
       self.assertEqual(actual_shape, expected_shape)
 
   def test_pytree_cache(self):

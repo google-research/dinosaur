@@ -173,7 +173,7 @@ class CoordinateSystemTest(parameterized.TestCase):
     interpolate_fn = coordinate_systems.get_spectral_interpolate_fn(
         coords, save_coords)
     actual = interpolate_fn(input_state)
-    for x, y in zip(jax.tree_leaves(actual), jax.tree_leaves(expected_state)):
+    for x, y in zip(jax.tree.leaves(actual), jax.tree.leaves(expected_state)):
       np.testing.assert_allclose(
           save_coords.horizontal.to_nodal(x),
           save_coords.horizontal.to_nodal(y), atol=atol)

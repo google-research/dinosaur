@@ -222,7 +222,7 @@ def barotropic_instability_tc(
   def random_state_fn(rng_key: jnp.ndarray) -> shallow_water.State:
     parameters = get_random_parameters(rng_key, default_parameters)
     # make sure that all parameters are non-dimensionalized.
-    parameters = jax.tree_map(physics_specs.nondimensionalize, parameters)
+    parameters = jax.tree.map(physics_specs.nondimensionalize, parameters)
     # The initial condition is computed by findind a steady state solution and
     # then adding a small 'bump' to the potential.
     zonal_velocity = jnp.stack([get_zonal_velocity(lat, parameters)

@@ -129,13 +129,13 @@ class ShallowWaterSpecs:
 
 def state_to_nodal(state: State, grid: spherical_harmonic.Grid) -> State:
   """Converts a state to the spatial/nodal basis."""
-  return jax.tree_map(
+  return jax.tree.map(
       lambda x: grid.to_nodal(grid.clip_wavenumbers(x)), state)
 
 
 def state_to_modal(state: State, grid: spherical_harmonic.Grid) -> State:
   """Converts a state to the spectral/modal basis."""
-  return jax.tree_map(grid.to_modal, state)
+  return jax.tree.map(grid.to_modal, state)
 
 
 def get_density_ratios(density: Array) -> np.ndarray:

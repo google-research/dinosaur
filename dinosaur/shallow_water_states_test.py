@@ -60,7 +60,7 @@ class BarotropicInstabilityTest(parameterized.TestCase):
   def testZonalVelocity(self, seed):
     parameters = shallow_water_states.get_random_parameters(
         jax.random.PRNGKey(seed), shallow_water_states.get_default_parameters())
-    parameters = jax.tree_map(DEFAULT_SCALE.nondimensionalize, parameters)
+    parameters = jax.tree.map(DEFAULT_SCALE.nondimensionalize, parameters)
 
     latitude = np.linspace(-np.pi / 2, np.pi / 2, 101)
     zonal_velocity = shallow_water_states.get_zonal_velocity(
@@ -89,7 +89,7 @@ class BarotropicInstabilityTest(parameterized.TestCase):
   def testHeight(self, seed):
     parameters = shallow_water_states.get_random_parameters(
         jax.random.PRNGKey(seed), shallow_water_states.get_default_parameters())
-    parameters = jax.tree_map(DEFAULT_SCALE.nondimensionalize, parameters)
+    parameters = jax.tree.map(DEFAULT_SCALE.nondimensionalize, parameters)
     longitude = np.linspace(0, 2 * np.pi, 101)
     latitude = np.linspace(-np.pi / 2, np.pi / 2, 101)
     longitude, latitude = np.meshgrid(longitude, latitude, indexing='ij')
