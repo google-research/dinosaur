@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 packages = ["dinosaur"]
 
 [project]
-name = "dinosaur"
-version = "0.1.0"
+name = "dinosaur-dycore"
+version = "1.0.0"
 authors = [
     {name = "Google LLC", email = "noreply@google.com"},
 ]
