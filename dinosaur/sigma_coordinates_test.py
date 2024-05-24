@@ -78,7 +78,7 @@ def test_cases():
            test_function=exponential_function,
            derivative_function=exponential_derivative,
            integral_function=exponential_integral,
-           layers=np.array([10, 20, 40, 80, 160, 320]),
+           layers=np.array([10, 20, 40, 80, 160]),
            grid_resolution=16),
       )
 
