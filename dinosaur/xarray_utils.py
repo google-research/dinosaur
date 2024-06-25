@@ -361,6 +361,7 @@ def data_to_xarray(
     sample_ids: typing.Array | None = None,
     additional_coords: MutableMapping[str, typing.Array] | None = None,
     attrs: Mapping[str, Any] | None = None,
+    serialize_coords_to_attrs: bool = True,
 ) -> xarray.Dataset:
   """Returns a sample/time referenced xarray.Dataset of primitive equation data.
 
@@ -371,6 +372,7 @@ def data_to_xarray(
     sample_ids: xarray coordinates to use for `sample` axis.
     additional_coords: additional coordinates to include.
     attrs: additional attributes to include in the xarray.Dataset metadata.
+    serialize_coords_to_attrs: whether to save serialized coords to attrs.
 
   Returns:
     xarray.Dataset with containing `data`.
@@ -429,7 +431,7 @@ def data_to_xarray(
       data_vars[key] = (dims, value)
       dims_in_state.update(set(dims))
 
-  dataset_attrs = coords.asdict()
+  dataset_attrs = coords.asdict() if serialize_coords_to_attrs else {}
   if attrs is not None:
     for key in dataset_attrs.keys():
       if key in attrs:
