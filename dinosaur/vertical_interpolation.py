@@ -314,3 +314,88 @@ def interp_hybrid_to_sigma(
   )
   regrid = lambda x: _vertical_interp_3d(desired_pressure, source_pressure, x)
   return pytree_utils.tree_map_over_nonscalars(regrid, fields)
+
+
+def _pressure_cell_bounds(pressure_at_cell_centers, surface_pressure):
+  # pressure_at_cell_centers must be non-decreasing.
+  # both inputs arguments should have the same units.
+  zero = jnp.array([0.0])
+  inner_boundaries = (
+      pressure_at_cell_centers[:-1] + pressure_at_cell_centers[1:]
+  ) / 2
+  surface = jnp.array([surface_pressure])
+  return jnp.concatenate([zero, inner_boundaries, surface])
+
+
+def _pressure_overlap(
+    source_centers: typing.Array,
+    target_centers: typing.Array,
+    surface_pressure: typing.Array,
+) -> jnp.ndarray:
+  """Calculate the interval overlap between pressure grid cells."""
+  source_bounds = _pressure_cell_bounds(source_centers, surface_pressure)
+  target_bounds = _pressure_cell_bounds(target_centers, surface_pressure)
+  # based on https://gist.github.com/shoyer/c0f1ddf409667650a076c058f9a17276
+  # (see also horizontal_interpolation.py)
+  upper = jnp.minimum(
+      target_bounds[1:, jnp.newaxis], source_bounds[jnp.newaxis, 1:]
+  )
+  lower = jnp.maximum(
+      target_bounds[:-1, jnp.newaxis], source_bounds[jnp.newaxis, :-1]
+  )
+  return jnp.maximum(upper - lower, 0)
+
+
+def conservative_pressure_weights(
+    source_centers: typing.Array,
+    target_centers: typing.Array,
+    surface_pressure: typing.Array,
+) -> jnp.ndarray:
+  """Create a weight matrix for conservative regridding on pressure levels.
+
+  Args:
+    source_centers: 1D strictly increasing pressure levels for the source grid.
+      All values must be between 0 and surface_pressure.
+    target_centers: 1D strictly increasing pressure levels for the target grid.
+      All values must be between 0 and surface_pressure.
+    surface_pressure: surface pressure.
+
+  Returns:
+    NumPy array with shape (target, source). Rows sum to 1.
+  """
+  weights = _pressure_overlap(source_centers, target_centers, surface_pressure)
+  weights /= jnp.sum(weights, axis=1, keepdims=True)
+  assert weights.shape == (target_centers.size, source_centers.size)
+  return weights
+
+
+@functools.partial(jax.jit, static_argnums=(1, 2))
+def regrid_hybrid_to_sigma(
+    fields: typing.Pytree,
+    hybrid_coords: HybridCoordinates,
+    sigma_coords: sigma_coordinates.SigmaCoordinates,
+    surface_pressure: typing.Array,
+) -> typing.Pytree:
+  """Conservatively regrid 3D fields from hybrid to sigma levels."""
+  desired_pressure = (
+      sigma_coords.centers[:, np.newaxis, np.newaxis] * surface_pressure
+  )
+  source_pressure = (
+      hybrid_coords.a_centers[:, np.newaxis, np.newaxis]
+      + hybrid_coords.b_centers[:, np.newaxis, np.newaxis] * surface_pressure
+  )
+
+  @jax.jit
+  @functools.partial(
+      jnp.vectorize, signature='(a,x,y),(b,x,y),(x,y),(b,x,y)->(a,x,y)'
+  )
+  @functools.partial(jax.vmap, in_axes=(-1, -1, -1, -1), out_axes=-1)
+  @functools.partial(jax.vmap, in_axes=(-1, -1, -1, -1), out_axes=-1)
+  def _regrid_3d(x, xp, x_max, fp):
+    weights = conservative_pressure_weights(xp, x, x_max)
+    return jnp.einsum('ab,b->a', weights, fp, precision='float32')
+
+  regrid = functools.partial(
+      _regrid_3d, desired_pressure, source_pressure, surface_pressure
+  )
+  return pytree_utils.tree_map_over_nonscalars(regrid, fields)
