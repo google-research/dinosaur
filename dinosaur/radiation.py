@@ -31,7 +31,6 @@ from dinosaur import coordinate_systems
 from dinosaur import primitive_equations
 from dinosaur import scales
 from dinosaur import typing
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -62,17 +61,18 @@ WB_REFERENCE_DATETIME = datetime.datetime(1979, 1, 1, 0, 0)
 
 
 @tree_math.struct
-class OrbitalTime():
+class OrbitalTime:
   """Nondimensional time based on orbital dynamics.
 
   Attributes:
-    orbital_phase: phase of the Earth's orbit around the Sun in radians.
-      The values 0, 2pi correspond to January 1st, midnight UTC.
-    rotational_phase: phase of the Earth's rotation around its axis in radians.
-      The values 0, 2pi correspond to midnight UTC.
+    orbital_phase: phase of the Earth's orbit around the Sun in radians. The
+      values 0, 2pi correspond to January 1st, midnight UTC.
+    synodic_phase: phase of the Earth's rotation around its axis in radians,
+      relative to the Sun. The values 0, 2pi correspond to midnight UTC.
   """
+
   orbital_phase: float
-  rotational_phase: float
+  synodic_phase: float
 
 
 def datetime64_to_datetime(when: np.datetime64) -> datetime.datetime:
@@ -92,8 +92,10 @@ def datetime_to_orbital_time(when: datetime.datetime) -> OrbitalTime:
   full_days = when.timetuple().tm_yday - 1
   fraction_of_day = (60 * when.hour + when.minute) / MINUTES_PER_DAY
   fraction_of_year = (full_days + fraction_of_day) / days_this_year
-  return OrbitalTime(orbital_phase=2 * jnp.pi * fraction_of_year,
-                     rotational_phase=2 * jnp.pi * fraction_of_day)
+  return OrbitalTime(
+      orbital_phase=2 * jnp.pi * fraction_of_year,
+      synodic_phase=2 * jnp.pi * fraction_of_day,
+  )
 
 
 def datetime_to_time(
@@ -122,7 +124,8 @@ def get_direct_solar_irradiance(
     orbital_phase: Numeric,
     mean_irradiance: Numeric = TOTAL_SOLAR_IRRADIANCE,
     variation: Numeric = SOLAR_IRRADIANCE_VARIATION,
-    perihelion: Numeric = PERIHELION) -> jnp.ndarray:
+    perihelion: Numeric = PERIHELION,
+) -> jnp.ndarray:
   """Returns solar radiation flux incident on the top of the atmosphere.
 
   Formula includes 6.9% seasonal variation due to Earth's elliptical orbit, but
@@ -136,8 +139,8 @@ def get_direct_solar_irradiance(
   Earth's surface, including atmospheric scattering.
 
   Args:
-    orbital_phase: phase of the Earth's orbit around the Sun in radians.
-      The values 0, 2pi correspond to January 1st, midnight UTC.
+    orbital_phase: phase of the Earth's orbit around the Sun in radians. The
+      values 0, 2pi correspond to January 1st, midnight UTC.
     mean_irradiance: average annual solar flux just outside Earth's atmosphere.
       Default is the "total solar irradiance", or "solar consant", in W/m^2.
     variation: amplitude of fluctuation in solar flux due to Earth's elliptical
@@ -157,44 +160,77 @@ def equation_of_time(orbital_phase: Numeric) -> jnp.ndarray:
   """Returns the value to add to mean solar time to get actual solar time."""
   # https://en.wikipedia.org/wiki/Equation_of_time
   b = orbital_phase - SPRING_EQUINOX
-  added_minutes = (9.87 * jnp.sin(2 * b) - 7.53 * jnp.cos(b) - 1.5 * jnp.sin(b))
-  # Output normalized as a correction to rotational_phase
+  added_minutes = 9.87 * jnp.sin(2 * b) - 7.53 * jnp.cos(b) - 1.5 * jnp.sin(b)
+  # Output normalized as a correction to synodic_phase
   return 2 * jnp.pi * added_minutes / MINUTES_PER_DAY
 
 
 def get_hour_angle(
-    orbital_phase: Numeric,
-    rotational_phase: Numeric,
-    longitude: Array) -> jnp.ndarray:
+    orbital_phase: Numeric, synodic_phase: Numeric, longitude: Array
+) -> jnp.ndarray:
   """Angular displacement of the sun east or west of the local meridian."""
   # https://en.wikipedia.org/wiki/Hour_angle
-  solar_time = rotational_phase + equation_of_time(orbital_phase) + longitude
+  solar_time = synodic_phase + equation_of_time(orbital_phase) + longitude
   return solar_time - jnp.pi
 
 
 def get_solar_sin_altitude(
     orbital_phase: Numeric,
-    rotational_phase: Numeric,
+    synodic_phase: Numeric,
     longitude: Array,
     latitude: Array,
 ) -> jnp.ndarray:
   """Returns sine of the solar altitude angle."""
   # https://en.wikipedia.org/wiki/Solar_zenith_angle
   declination = get_declination(orbital_phase)
-  hour_angle = get_hour_angle(orbital_phase, rotational_phase, longitude)
+  hour_angle = get_hour_angle(orbital_phase, synodic_phase, longitude)
   first_term = jnp.cos(latitude) * jnp.cos(declination) * jnp.cos(hour_angle)
   second_term = jnp.sin(latitude) * jnp.sin(declination)
   return first_term + second_term
 
 
-def get_radiation_flux(orbital_phase: Numeric, altitude: Array) -> jnp.ndarray:
+def get_radiation_flux(
+    orbital_time: OrbitalTime,
+    longitude: Array,
+    latitude: Array,
+    mean_irradiance: Numeric = TOTAL_SOLAR_IRRADIANCE,
+    variation: Numeric = SOLAR_IRRADIANCE_VARIATION,
+) -> jnp.ndarray:
   """Returns TOA incident radiation flux."""
-  is_daytime = (altitude > 0)
-  flux = get_direct_solar_irradiance(orbital_phase)
-  return flux * is_daytime * jnp.sin(altitude)
+  sin_altitude = get_solar_sin_altitude(
+      orbital_phase=orbital_time.orbital_phase,
+      synodic_phase=orbital_time.synodic_phase,
+      longitude=longitude,
+      latitude=latitude,
+  )
+  is_daytime = sin_altitude > 0
+  flux = get_direct_solar_irradiance(
+      orbital_phase=orbital_time.orbital_phase,
+      mean_irradiance=mean_irradiance,
+      variation=variation,
+  )
+  return flux * is_daytime * sin_altitude
 
 
-class SolarRadiation():
+def get_normalized_radiation_flux(
+    orbital_time: OrbitalTime,
+    longitude: Array,
+    latitude: Array,
+    mean_irradiance: Numeric = TOTAL_SOLAR_IRRADIANCE,
+    variation: Numeric = SOLAR_IRRADIANCE_VARIATION,
+) -> jnp.ndarray:
+  """Returns TOA incident radiation flux, normalized to between -1 and 1."""
+  scale = mean_irradiance + variation
+  return get_radiation_flux(
+      orbital_time,
+      longitude,
+      latitude,
+      mean_irradiance=mean_irradiance / scale,
+      variation=variation / scale,
+  )
+
+
+class SolarRadiation:
   """Top of atmosphere incident solar radiation (TISR)."""
 
   def __init__(
@@ -202,7 +238,7 @@ class SolarRadiation():
       coords: coordinate_systems.CoordinateSystem,
       physics_specs: primitive_equations.PrimitiveEquationsSpecs,
       reference_datetime: datetime.datetime | np.datetime64,
-      ):
+  ):
     """Initialize SolarRadiation.
 
     Args:
@@ -225,13 +261,14 @@ class SolarRadiation():
     )
 
     self.total_solar_irradiance = physics_specs.nondimensionalize(
-        TOTAL_SOLAR_IRRADIANCE)
+        TOTAL_SOLAR_IRRADIANCE
+    )
     self.solar_irradiance_variation = physics_specs.nondimensionalize(
-        SOLAR_IRRADIANCE_VARIATION)
+        SOLAR_IRRADIANCE_VARIATION
+    )
     self.physics_specs = physics_specs
 
-  def datetime_to_time(
-      self, when: datetime.datetime | np.datetime64) -> float:
+  def datetime_to_time(self, when: datetime.datetime | np.datetime64) -> float:
     """Returns nondimensional time corresponding to the specified datetime."""
     return datetime_to_time(when, self.physics_specs, self.reference_datetime)
 
@@ -248,35 +285,34 @@ class SolarRadiation():
     now = self.time_to_orbital_time(time)
     return get_hour_angle(
         orbital_phase=now.orbital_phase,
-        rotational_phase=now.rotational_phase,
-        longitude=self.lon)
+        synodic_phase=now.synodic_phase,
+        longitude=self.lon,
+    )
 
   def radiation_flux(self, time: Numeric) -> jnp.ndarray:
     """Returns non-dimensionalized TOA incident solar radiation flux."""
     now = self.time_to_orbital_time(time)
-    sin_altitude = get_solar_sin_altitude(
-        orbital_phase=now.orbital_phase,
-        rotational_phase=now.rotational_phase,
-        longitude=self.lon,
-        latitude=self.lat)
-    is_daytime = (sin_altitude > 0)
-    flux = get_direct_solar_irradiance(
-        orbital_phase=now.orbital_phase,
+    return get_radiation_flux(
+        now,
+        self.lon,
+        self.lat,
         mean_irradiance=self.total_solar_irradiance,
-        variation=self.solar_irradiance_variation)
-    return flux * is_daytime * sin_altitude
+        variation=self.solar_irradiance_variation,
+    )
 
   @classmethod
   def normalized(
       cls,
       coords: coordinate_systems.CoordinateSystem,
       physics_specs: primitive_equations.PrimitiveEquationsSpecs,
-      reference_datetime: datetime.datetime | np.datetime64
-      ) -> SolarRadiation:
+      reference_datetime: datetime.datetime | np.datetime64,
+  ) -> SolarRadiation:
     """Initialize SolarRadiation for normalized solar radiation."""
-    this = cls(coords=coords,
-               physics_specs=physics_specs,
-               reference_datetime=reference_datetime)
+    this = cls(
+        coords=coords,
+        physics_specs=physics_specs,
+        reference_datetime=reference_datetime,
+    )
     scale = this.total_solar_irradiance + this.solar_irradiance_variation
     this.total_solar_irradiance /= scale
     this.solar_irradiance_variation /= scale

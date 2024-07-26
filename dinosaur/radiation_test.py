@@ -65,54 +65,54 @@ class RadiationTest(parameterized.TestCase):
       # 1980 is a leap year
       dict(when=datetime.datetime(1980, 1, 1, 0, 0),
            exp_orbital_phase=0,
-           exp_rotational_phase=0),
+           exp_synodic_phase=0),
       dict(when=datetime.datetime(1980, 1, 1, 12, 0),
            exp_orbital_phase=0.5 * TWOPI / 366,
-           exp_rotational_phase=jnp.pi),
+           exp_synodic_phase=jnp.pi),
       dict(when=datetime.datetime(1980, 1, 1, 23, 59),
            exp_orbital_phase=(1439 / 1440) * TWOPI / 366,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       dict(when=datetime.datetime(1980, 1, 1, 23, 59),
            exp_orbital_phase=(1439 / 1440) * TWOPI / 366,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       dict(when=datetime.datetime(1980, 5, 1, 0, 0),
            exp_orbital_phase=(31 + 29 + 31 + 30) * TWOPI / 366,
-           exp_rotational_phase=0),
+           exp_synodic_phase=0),
       dict(when=datetime.datetime(1980, 12, 31, 23, 59),
            exp_orbital_phase=TWOPI - (1 / 1440) * TWOPI / 366,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       # 1981 is not a leap year
       dict(when=datetime.datetime(1981, 1, 1, 0, 0),
            exp_orbital_phase=0,
-           exp_rotational_phase=0),
+           exp_synodic_phase=0),
       dict(when=datetime.datetime(1981, 1, 1, 12, 0),
            exp_orbital_phase=0.5 * TWOPI / 365,
-           exp_rotational_phase=jnp.pi),
+           exp_synodic_phase=jnp.pi),
       dict(when=datetime.datetime(1981, 1, 1, 23, 59),
            exp_orbital_phase=(1439 / 1440) * TWOPI / 365,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       dict(when=datetime.datetime(1981, 1, 1, 23, 59),
            exp_orbital_phase=(1439 / 1440) * TWOPI / 365,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       dict(when=datetime.datetime(1981, 5, 1, 0, 0),
            exp_orbital_phase=(31 + 28 + 31 + 30) * TWOPI / 365,
-           exp_rotational_phase=0),
+           exp_synodic_phase=0),
       dict(when=datetime.datetime(1981, 12, 31, 23, 59),
            exp_orbital_phase=TWOPI - (1 / 1440) * TWOPI / 365,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
       # The distant future
       dict(when=datetime.datetime(2022, 5, 1, 0, 0),
            exp_orbital_phase=(31 + 28 + 31 + 30) * TWOPI / 365,
-           exp_rotational_phase=0),
+           exp_synodic_phase=0),
       dict(when=datetime.datetime(2045, 12, 31, 23, 59),
            exp_orbital_phase=TWOPI - (1 / 1440) * TWOPI / 365,
-           exp_rotational_phase=1439 * TWOPI / 1440),
+           exp_synodic_phase=1439 * TWOPI / 1440),
   )
   def test_datetime_to_orbital_time(
-      self, when, exp_orbital_phase, exp_rotational_phase):
+      self, when, exp_orbital_phase, exp_synodic_phase):
     actual = radiation.datetime_to_orbital_time(when)
     self.assertAlmostEqual(actual.orbital_phase, exp_orbital_phase)
-    self.assertAlmostEqual(actual.rotational_phase, exp_rotational_phase)
+    self.assertAlmostEqual(actual.synodic_phase, exp_synodic_phase)
 
   def test_get_direct_solar_irradiance_no_units(self):
     flux = radiation.get_direct_solar_irradiance(
@@ -142,27 +142,6 @@ class RadiationTest(parameterized.TestCase):
     ot = radiation.datetime_to_orbital_time(when)
     delta_phase = radiation.equation_of_time(ot.orbital_phase)
     np.testing.assert_allclose(delta_phase, 0, atol=0.005)
-
-  @parameterized.parameters(
-      dict(orbital_phase=radiation.PERIHELION,
-           expected_max=(radiation.TOTAL_SOLAR_IRRADIANCE
-                         + radiation.SOLAR_IRRADIANCE_VARIATION)),
-      dict(orbital_phase=radiation.PERIHELION + jnp.pi,
-           expected_max=(radiation.TOTAL_SOLAR_IRRADIANCE
-                         - radiation.SOLAR_IRRADIANCE_VARIATION)),
-      dict(orbital_phase=radiation.PERIHELION + jnp.pi / 2,
-           expected_max=radiation.TOTAL_SOLAR_IRRADIANCE),
-      dict(orbital_phase=radiation.PERIHELION + 3 * jnp.pi / 2,
-           expected_max=radiation.TOTAL_SOLAR_IRRADIANCE),
-  )
-  def test_get_radiation_flux(self, orbital_phase, expected_max):
-    altitude = jnp.linspace(-jnp.pi, jnp.pi, 5)
-    flux = radiation.get_radiation_flux(orbital_phase, altitude)
-    self.assertEqual(flux.shape, altitude.shape)
-    # zero flux for altitude <= 0
-    np.testing.assert_allclose(flux[0:3], 0)
-    # Maximum value at altitude = pi / 2
-    np.testing.assert_allclose(flux[3], expected_max)
 
 
 def _get_expected_value_modulo_2pi(expected, actual):
@@ -273,21 +252,21 @@ class SolarRadiationTest(parameterized.TestCase):
       # Nondim time based on radiation.DAYS_PER_YEAR = 365.25
       dict(when=radiation.WB_REFERENCE_DATETIME,
            expected_orbital_phase=0,
-           expected_rotational_phase=0),
+           expected_synodic_phase=0),
       dict(when=(radiation.WB_REFERENCE_DATETIME
                  + datetime.timedelta(days=365.25)),
            expected_orbital_phase=TWOPI,
-           expected_rotational_phase=365.25 * TWOPI),
+           expected_synodic_phase=365.25 * TWOPI),
       dict(when=(radiation.WB_REFERENCE_DATETIME
                  + datetime.timedelta(days=-365.25)),
            expected_orbital_phase=-TWOPI,
-           expected_rotational_phase=-365.25 * TWOPI),
+           expected_synodic_phase=-365.25 * TWOPI),
       dict(when=datetime.datetime(2019, 1, 1, 0, 0),
            expected_orbital_phase=40 * TWOPI,
-           expected_rotational_phase=40 * 365.25 * TWOPI),
+           expected_synodic_phase=40 * 365.25 * TWOPI),
   )
   def test_time_to_orbital_time(
-      self, when, expected_orbital_phase, expected_rotational_phase):
+      self, when, expected_orbital_phase, expected_synodic_phase):
     solar_radiation = radiation.SolarRadiation(
         self.coords, self.physics_specs, self.reference_datetime)
     time = solar_radiation.datetime_to_time(when)
@@ -298,10 +277,10 @@ class SolarRadiationTest(parameterized.TestCase):
     )
     self.assertAlmostEqual(actual.orbital_phase, expected_orbital_phase)
 
-    expected_rotational_phase = _get_expected_value_modulo_2pi(
-        expected_rotational_phase, actual.rotational_phase
+    expected_synodic_phase = _get_expected_value_modulo_2pi(
+        expected_synodic_phase, actual.synodic_phase
     )
-    self.assertAlmostEqual(actual.rotational_phase, expected_rotational_phase)
+    self.assertAlmostEqual(actual.synodic_phase, expected_synodic_phase)
 
   def test_solar_hour_angle(self):
     solar_radiation = radiation.SolarRadiation(
