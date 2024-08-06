@@ -20,7 +20,6 @@ from typing import Any, Callable, Dict, Sequence, Union
 from dinosaur import pytree_utils
 from dinosaur import sigma_coordinates
 from dinosaur import typing
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -31,7 +30,7 @@ InterpolateFn = Callable[[Array, Array, Array], Array]
 
 
 def vectorize_vertical_interpolation(
-    interpolate_fn: InterpolateFn,
+    interpolate_fn: InterpolateFn
 ) -> InterpolateFn:
   """Vectorizes vertical `interpolate_fn` function to work on 3+d fields."""
   # inerpolate_fn operates on `x, xp, fp` (target, source loc, source vals).
@@ -171,31 +170,56 @@ class HybridCoordinates:
   where `sp` is surface pressure.
 
   Attributes:
-    a_centers: offset coefficient for the center of each level, starting at the
-      level closest to the top of the atmosphere.
-    b_centers: slope coefficient for the center of each level, starting at the
-      level closest to the top of the atmosphere.
+    a_boundaries: offset coefficient for the boundaries of each level, starting
+      at the level closest to the top of the atmosphere.
+    b_boundaries: slope coefficient for the boundaries of each level, starting
+      at the level closest to the top of the atmosphere.
     layers: number of vertical layers.
   """
 
-  a_centers: np.ndarray
-  b_centers: np.ndarray
+  a_boundaries: np.ndarray
+  b_boundaries: np.ndarray
+
+  def __post_init__(self):
+    if len(self.a_boundaries) != len(self.b_boundaries):
+      raise ValueError(
+          'Expected `a_boundaries` and `b_boundaries` to have the same length, '
+          f'got {len(self.a_boundaries)} and {len(self.b_boundaries)}.'
+      )
 
   @property
   def layers(self) -> int:
-    return len(self.a_centers)
+    return len(self.a_boundaries) - 1
 
   def __hash__(self):
     return hash(
-        (tuple(self.a_centers.tolist()), tuple(self.b_centers.tolist()))
+        (tuple(self.a_boundaries.tolist()), tuple(self.b_boundaries.tolist()))
     )
 
   def __eq__(self, other):
     return (
         isinstance(other, HybridCoordinates)
-        and np.array_equal(self.a_centers, other.a_centers)
-        and np.array_equal(self.b_centers, other.b_centers)
+        and np.array_equal(self.a_boundaries, other.a_boundaries)
+        and np.array_equal(self.b_boundaries, other.b_boundaries)
     )
+
+  def get_sigma_boundaries(
+      self, surface_pressure: typing.Array
+  ) -> typing.Array:
+    """Returns boundaries between sigma levels for a given surface pressure."""
+    f = lambda sp: self.a_boundaries / sp + self.b_boundaries
+    for _ in range(surface_pressure.ndim):
+      f = jax.vmap(f, in_axes=-1, out_axes=-1)
+    result = f(surface_pressure)
+    assert result.shape == (self.layers + 1,) + surface_pressure.shape
+    return result
+
+  def get_sigma_centers(self, surface_pressure: typing.Array) -> typing.Array:
+    """Returns centers of sigam levels for a given surface pressure."""
+    boundaries = self.get_sigma_boundaries(surface_pressure)
+    result = (boundaries[1:] + boundaries[:-1]) / 2
+    assert result.shape == (self.layers,) + surface_pressure.shape
+    return result
 
 
 @functools.partial(jax.jit, static_argnums=0)
@@ -261,9 +285,11 @@ def interp_pressure_to_sigma(
   """Interpolate 3D fields from pressure to sigma levels."""
   desired = sigma_coords.centers[:, np.newaxis, np.newaxis] * surface_pressure
   regrid = lambda x: interpolate_fn(desired, pressure_coords.centers, x)
+
   def cond_fn(x) -> bool:
     shape = jnp.shape(x)
     return len(shape) >= 3 and shape[-3] == pressure_coords.centers.shape[0]
+
   return pytree_utils.tree_map_where(
       condition_fn=cond_fn,
       f=regrid,
@@ -279,7 +305,8 @@ def interp_sigma_to_pressure(
     sigma_coords: sigma_coordinates.SigmaCoordinates,
     surface_pressure: typing.Array,
     interpolate_fn: InterpolateFn = (
-        vectorize_vertical_interpolation(_linear_interp_with_safe_extrap)),
+        vectorize_vertical_interpolation(_linear_interp_with_safe_extrap)
+    ),
 ) -> typing.Pytree:
   """Interpolate 3D fields from sigma to pressure levels."""
   desired = (
@@ -289,10 +316,10 @@ def interp_sigma_to_pressure(
   return pytree_utils.tree_map_over_nonscalars(regrid, fields)
 
 
-@functools.partial(jnp.vectorize, signature='(a,x,y),(b,x,y),(b,x,y)->(a,x,y)')
+@functools.partial(jnp.vectorize, signature='(a),(b,x,y),(b,x,y)->(a,x,y)')
 @functools.partial(jax.vmap, in_axes=(0, None, None), out_axes=0)
-@functools.partial(jax.vmap, in_axes=(-1, -1, -1), out_axes=-1)
-@functools.partial(jax.vmap, in_axes=(-1, -1, -1), out_axes=-1)
+@functools.partial(jax.vmap, in_axes=(None, -1, -1), out_axes=-1)
+@functools.partial(jax.vmap, in_axes=(None, -1, -1), out_axes=-1)
 def _vertical_interp_3d(x, xp, fp):
   return _linear_interp_with_safe_extrap(x, xp, fp)
 
@@ -305,36 +332,17 @@ def interp_hybrid_to_sigma(
     surface_pressure: typing.Array,
 ) -> typing.Pytree:
   """Interpolate 3D fields from hybrid to sigma levels."""
-  desired_pressure = (
-      sigma_coords.centers[:, np.newaxis, np.newaxis] * surface_pressure
-  )
-  source_pressure = (
-      hybrid_coords.a_centers[:, np.newaxis, np.newaxis]
-      + hybrid_coords.b_centers[:, np.newaxis, np.newaxis] * surface_pressure
-  )
-  regrid = lambda x: _vertical_interp_3d(desired_pressure, source_pressure, x)
+  # Linear interpolation from values at cell centers on hybrid levels to cell
+  # centers on sigma levels. Here we interpolate on sigma coordinates.
+  source_sigmas = hybrid_coords.get_sigma_centers(surface_pressure)
+  regrid = lambda x: _vertical_interp_3d(sigma_coords.centers, source_sigmas, x)
   return pytree_utils.tree_map_over_nonscalars(regrid, fields)
 
 
-def _pressure_cell_bounds(pressure_at_cell_centers, surface_pressure):
-  # pressure_at_cell_centers must be non-decreasing.
-  # both inputs arguments should have the same units.
-  zero = jnp.array([0.0])
-  inner_boundaries = (
-      pressure_at_cell_centers[:-1] + pressure_at_cell_centers[1:]
-  ) / 2
-  surface = jnp.array([surface_pressure])
-  return jnp.concatenate([zero, inner_boundaries, surface])
-
-
-def _pressure_overlap(
-    source_centers: typing.Array,
-    target_centers: typing.Array,
-    surface_pressure: typing.Array,
+def _interval_overlap(
+    source_bounds: typing.Array, target_bounds: typing.Array
 ) -> jnp.ndarray:
-  """Calculate the interval overlap between pressure grid cells."""
-  source_bounds = _pressure_cell_bounds(source_centers, surface_pressure)
-  target_bounds = _pressure_cell_bounds(target_centers, surface_pressure)
+  """Calculate the interval overlap between grid cells."""
   # based on https://gist.github.com/shoyer/c0f1ddf409667650a076c058f9a17276
   # (see also horizontal_interpolation.py)
   upper = jnp.minimum(
@@ -346,26 +354,23 @@ def _pressure_overlap(
   return jnp.maximum(upper - lower, 0)
 
 
-def conservative_pressure_weights(
-    source_centers: typing.Array,
-    target_centers: typing.Array,
-    surface_pressure: typing.Array,
+def conservative_regrid_weights(
+    source_bounds: typing.Array, target_bounds: typing.Array
 ) -> jnp.ndarray:
   """Create a weight matrix for conservative regridding on pressure levels.
 
   Args:
-    source_centers: 1D strictly increasing pressure levels for the source grid.
-      All values must be between 0 and surface_pressure.
-    target_centers: 1D strictly increasing pressure levels for the target grid.
-      All values must be between 0 and surface_pressure.
-    surface_pressure: surface pressure.
+    source_bounds: boundaries between increasing pressure levels for the source
+      grid. Values must be strictly increasing.
+    target_bounds: 1D strictly increasing pressure levels for the target grid.
+      Values must be strictly increasing.
 
   Returns:
     NumPy array with shape (target, source). Rows sum to 1.
   """
-  weights = _pressure_overlap(source_centers, target_centers, surface_pressure)
+  weights = _interval_overlap(source_bounds, target_bounds)
   weights /= jnp.sum(weights, axis=1, keepdims=True)
-  assert weights.shape == (target_centers.size, source_centers.size)
+  assert weights.shape == (target_bounds.size - 1, source_bounds.size - 1)
   return weights
 
 
@@ -377,25 +382,28 @@ def regrid_hybrid_to_sigma(
     surface_pressure: typing.Array,
 ) -> typing.Pytree:
   """Conservatively regrid 3D fields from hybrid to sigma levels."""
-  desired_pressure = (
-      sigma_coords.centers[:, np.newaxis, np.newaxis] * surface_pressure
-  )
-  source_pressure = (
-      hybrid_coords.a_centers[:, np.newaxis, np.newaxis]
-      + hybrid_coords.b_centers[:, np.newaxis, np.newaxis] * surface_pressure
-  )
+  # Conservative regridding is a simple area-weighted average of source cells.
+  # Here we are regridding in one dimension, so it only depends on the overlap
+  # between cell boundaries. Here we calculate both bounds in terms of sigma
+  # coordinates (from 0 to 1).
+  source_bounds = hybrid_coords.get_sigma_boundaries(surface_pressure)
+  target_bounds = sigma_coords.boundaries
 
   @jax.jit
-  @functools.partial(
-      jnp.vectorize, signature='(a,x,y),(b,x,y),(x,y),(b,x,y)->(a,x,y)'
-  )
-  @functools.partial(jax.vmap, in_axes=(-1, -1, -1, -1), out_axes=-1)
-  @functools.partial(jax.vmap, in_axes=(-1, -1, -1, -1), out_axes=-1)
-  def _regrid_3d(x, xp, x_max, fp):
-    weights = conservative_pressure_weights(xp, x, x_max)
-    return jnp.einsum('ab,b->a', weights, fp, precision='float32')
+  @functools.partial(jnp.vectorize, signature='(a,x,y),(b),(c,x,y)->(d,x,y)')
+  @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
+  @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
+  def regrid(source_bounds, target_bounds, field):
+    if fields.shape[0] != hybrid_coords.layers:
+      raise ValueError(
+          f'Source has {hybrid_coords.layers} layers, but field has'
+          f' {fields.shape[0]}'
+      )
+    weights = conservative_regrid_weights(source_bounds, target_bounds)
+    result = jnp.einsum('ab,b->a', weights, field, precision='float32')
+    assert result.shape[0] == sigma_coords.layers
+    return result
 
-  regrid = functools.partial(
-      _regrid_3d, desired_pressure, source_pressure, surface_pressure
+  return pytree_utils.tree_map_over_nonscalars(
+      lambda x: regrid(source_bounds, target_bounds, x), fields
   )
-  return pytree_utils.tree_map_over_nonscalars(regrid, fields)

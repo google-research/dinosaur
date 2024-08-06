@@ -99,14 +99,15 @@ class PressureLevelsTest(parameterized.TestCase):
   def test_interp_hybrid_to_sigma(self):
     sigma_coords = sigma_coordinates.SigmaCoordinates.equidistant(5)
     hybrid_coords = vertical_interpolation.HybridCoordinates(
-        # at pressures [100, 600, 900]
-        a_centers=np.array([100, 100, 0]),
-        b_centers=np.array([0, 0.5, 0.9]),
+        # pressure bounds at [0, 400, 800, 1000] -> centers at [200, 600, 900]
+        a_boundaries=np.array([0, 400, 300, 0]),
+        b_boundaries=np.array([0, 0, 0.5, 1.0]),
     )
-    surface_pressure = np.array([[[1000]]])
+    surface_pressure = np.array([[1000]])
     original = np.array([1.0, 2.0, 3.0])[:, np.newaxis, np.newaxis]
-    # linear interpolation to pressures [100, 300, 500, 700, 900]
-    expected = np.array([1.0, 1.4, 1.8, 2 + 1 / 3, 3.0])
+    # linear interpolation (with extrapolation) from y=[1, 2, 3] defined
+    # at x=[200, 600, 900] to x=[100, 300, 500, 700, 900].
+    expected = np.array([0.75, 1.25, 1.75, 2 + 1 / 3, 3.0])
     actual = vertical_interpolation.interp_hybrid_to_sigma(
         original, hybrid_coords, sigma_coords, surface_pressure
     ).ravel()
@@ -115,11 +116,11 @@ class PressureLevelsTest(parameterized.TestCase):
   def test_regrid_hybrid_to_sigma(self):
     sigma_coords = sigma_coordinates.SigmaCoordinates.equidistant(5)
     hybrid_coords = vertical_interpolation.HybridCoordinates(
-        # at pressures [10, 50, 100, 300, 600, 800, 900]
-        a_centers=np.array([10, 50, 100, 300, 500, 500, 500]),
-        b_centers=np.array([0, 0, 0, 0, 0.1, 0.3, 0.4]),
+        # at pressures boundaries [0, 30, 75, 200, 450, 700, 850, 1000]
+        a_boundaries=np.array([0, 30, 75, 200, 300, 300, 150, 0]),
+        b_boundaries=np.array([0, 0, 0, 0, 0.15, 0.4, 0.7, 1]),
     )
-    surface_pressure = np.array([[[1000]]])
+    surface_pressure = np.array([[1000]])
     original = np.arange(1.0, 8.0)[:, np.newaxis, np.newaxis]
     # area weighted averages for cells centered at [100, 300, 500, 700, 900]
     expected = np.array([
@@ -133,6 +134,13 @@ class PressureLevelsTest(parameterized.TestCase):
         original, hybrid_coords, sigma_coords, surface_pressure
     ).ravel()
     np.testing.assert_allclose(actual, expected, atol=1e-6)
+
+  def test_interval_overlap(self):
+    actual = vertical_interpolation._interval_overlap(
+        np.array([1, 4, 6, 9, 10]), np.array([0, 3, 7, 10])
+    )
+    expected = np.array([[2, 0, 0, 0], [1, 2, 1, 0], [0, 0, 2, 1]])
+    np.testing.assert_array_equal(expected, actual)
 
 
 if __name__ == '__main__':
