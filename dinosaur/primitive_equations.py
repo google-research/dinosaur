@@ -137,7 +137,8 @@ class DiagnosticState:
     vorticity: nodal values of the vorticity field of shape [h, q, t].
     divergence: nodal values of the divergence field of shape [h, q, t].
     temperature_variation: nodal values of the T' field of shape [h, q, t].
-    cos_lat_u: (2,) nodal values of cosθ * velocity_vector of shape [h, q, t].
+    cos_lat_u: tuple of nodal values of cosθ * velocity_vector, each of shape
+      [h, q, t].
     sigma_dot_explicit: nodal values of d𝜎/dt due to pressure gradient terms
       `u · ∇(log(ps))` of shape [h, q, t].
     sigma_dot_full: nodal values of d𝜎/dt due to all terms of shape [h, q, t].
@@ -152,7 +153,7 @@ class DiagnosticState:
   vorticity: Array
   divergence: Array
   temperature_variation: Array
-  cos_lat_u: Array
+  cos_lat_u: tuple[Array, Array]
   sigma_dot_explicit: Array
   sigma_dot_full: Array
   cos_lat_grad_log_sp: Array
