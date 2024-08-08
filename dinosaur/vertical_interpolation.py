@@ -13,10 +13,14 @@
 # limitations under the License.
 
 """Routines for regridding between sigma and pressure levels."""
+from __future__ import annotations
+
 import dataclasses
 import functools
+import importlib
 from typing import Any, Callable, Dict, Sequence, Union
 
+import dinosaur
 from dinosaur import pytree_utils
 from dinosaur import sigma_coordinates
 from dinosaur import typing
@@ -30,7 +34,7 @@ InterpolateFn = Callable[[Array, Array, Array], Array]
 
 
 def vectorize_vertical_interpolation(
-    interpolate_fn: InterpolateFn
+    interpolate_fn: InterpolateFn,
 ) -> InterpolateFn:
   """Vectorizes vertical `interpolate_fn` function to work on 3+d fields."""
   # inerpolate_fn operates on `x, xp, fp` (target, source loc, source vals).
@@ -187,6 +191,42 @@ class HybridCoordinates:
           f'got {len(self.a_boundaries)} and {len(self.b_boundaries)}.'
       )
 
+  @classmethod
+  def _from_resource_csv(cls, path: str) -> HybridCoordinates:
+    levels_csv = importlib.resources.files(dinosaur).joinpath(path)
+    with levels_csv.open() as f:
+      a_in_pa, b = np.loadtxt(f, skiprows=1, usecols=(1, 2), delimiter='\t').T
+    a = a_in_pa / 100  # convert from Pa to hPa
+    # any reasonable hybrid coordinate system falls in this range (certainly
+    # including UFS and ECMWF)
+    assert 100 < a.max() < 1000
+    return cls(a_boundaries=a, b_boundaries=b)
+
+  @classmethod
+  def ECMWF137(cls) -> HybridCoordinates:  # pylint: disable=invalid-name
+    """Returns the 137 model levels used by ECMWF's IFS (e.g., in ERA5).
+
+    Pressure is returned in units of hPa.
+
+    For details, see the ECMWF wiki:
+    https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions
+    """
+    return cls._from_resource_csv('data/ecmwf137_hybrid_levels.csv')
+
+  @classmethod
+  def UFS127(cls) -> HybridCoordinates:  # pylint: disable=invalid-name
+    """Returns the 127 model levels used by NOAA's UFS (GFS v16).
+
+    Pressure is returned in units of hPa.
+
+    For details, see the documentation for UFS Replay:
+    https://ufs2arco.readthedocs.io/en/latest/example_pressure_interpolation.html
+
+    Source data:
+    https://github.com/NOAA-PSL/ufs2arco/blob/v0.1.2/ufs2arco/replay_vertical_levels.yaml
+    """
+    return cls._from_resource_csv('data/ufs127_hybrid_levels.csv')
+
   @property
   def layers(self) -> int:
     return len(self.a_boundaries) - 1
@@ -206,7 +246,15 @@ class HybridCoordinates:
   def get_sigma_boundaries(
       self, surface_pressure: typing.Array
   ) -> typing.Array:
-    """Returns boundaries between sigma levels for a given surface pressure."""
+    """Returns boundaries between sigma levels for a given surface pressure.
+
+    Args:
+      surface_pressure: float array of surface pressure values, in the same
+        units as `a_boundaries`.
+
+    Returns:
+      Array with shape `(layers + 1,) + surface_pressure.shape`.
+    """
     f = lambda sp: self.a_boundaries / sp + self.b_boundaries
     for _ in range(surface_pressure.ndim):
       f = jax.vmap(f, in_axes=-1, out_axes=-1)
@@ -215,7 +263,15 @@ class HybridCoordinates:
     return result
 
   def get_sigma_centers(self, surface_pressure: typing.Array) -> typing.Array:
-    """Returns centers of sigam levels for a given surface pressure."""
+    """Returns centers of sigma levels for a given surface pressure.
+
+    Args:
+      surface_pressure: float array of surface pressure values, in the same
+        units as `a_boundaries`.
+
+    Returns:
+      Array with shape `(layers,) + surface_pressure.shape`.
+    """
     boundaries = self.get_sigma_boundaries(surface_pressure)
     result = (boundaries[1:] + boundaries[:-1]) / 2
     assert result.shape == (self.layers,) + surface_pressure.shape

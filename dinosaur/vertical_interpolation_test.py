@@ -96,6 +96,29 @@ class PressureLevelsTest(parameterized.TestCase):
     expected[3:, :, 1] = np.nan
     np.testing.assert_allclose(roundtripped, expected, atol=1e-6)
 
+
+class HybridCoordinatesTest(absltest.TestCase):
+
+  def test_ecmwf_137(self):
+    coords = vertical_interpolation.HybridCoordinates.ECMWF137()
+    self.assertEqual(coords.layers, 137)
+
+    # spot check ph (half-level, on the boundary) from row 84 in the table
+    expected = 316.3607
+    actual = coords.a_boundaries[84] + coords.b_boundaries[84] * 1013.250
+    self.assertAlmostEqual(expected, actual, places=3)
+
+  def test_ufs_127(self):
+    coords = vertical_interpolation.HybridCoordinates.UFS127()
+    self.assertEqual(coords.layers, 127)
+
+    # spot check pf (full-level, centered) from row 80 in the table
+    expected = 572.829345703125
+    p_below = coords.a_boundaries[79] + coords.b_boundaries[79] * 1000
+    p_above = coords.a_boundaries[80] + coords.b_boundaries[80] * 1000
+    actual = (p_below + p_above) / 2
+    self.assertAlmostEqual(expected, actual, places=1)
+
   def test_interp_hybrid_to_sigma(self):
     sigma_coords = sigma_coordinates.SigmaCoordinates.equidistant(5)
     hybrid_coords = vertical_interpolation.HybridCoordinates(
