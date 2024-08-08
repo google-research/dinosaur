@@ -119,6 +119,25 @@ class HybridCoordinatesTest(absltest.TestCase):
     actual = (p_below + p_above) / 2
     self.assertAlmostEqual(expected, actual, places=1)
 
+  def test_to_approx_sigma_coords(self):
+    hybrid_coords = vertical_interpolation.HybridCoordinates(
+        # pressure bounds at [0, 500, 800, 1000]
+        a_boundaries=np.array([0, 500, 300, 0]),
+        b_boundaries=np.array([0, 0, 0.5, 1.0]),
+    )
+
+    expected = np.array([0.0, 0.65, 1.0])
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=2)
+    np.testing.assert_allclose(sigma_coords.boundaries, expected)
+
+    expected = np.array([0.0, 0.5, 0.8, 1.0])
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=3)
+    np.testing.assert_allclose(sigma_coords.boundaries, expected)
+
+    expected = np.array([0.0, 0.25, 0.5, 0.65, 0.8, 0.9, 1.0])
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=6)
+    np.testing.assert_allclose(sigma_coords.boundaries, expected)
+
   def test_interp_hybrid_to_sigma(self):
     sigma_coords = sigma_coordinates.SigmaCoordinates.equidistant(5)
     hybrid_coords = vertical_interpolation.HybridCoordinates(

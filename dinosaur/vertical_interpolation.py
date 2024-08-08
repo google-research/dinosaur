@@ -244,17 +244,18 @@ class HybridCoordinates:
     )
 
   def get_sigma_boundaries(
-      self, surface_pressure: typing.Array
+      self, surface_pressure: typing.Numeric
   ) -> typing.Array:
-    """Returns boundaries between sigma levels for a given surface pressure.
+    """Returns centers of sigma levels for a given surface pressure.
 
     Args:
-      surface_pressure: float array of surface pressure values, in the same
+      surface_pressure: float or array of surface pressure values, in the same
         units as `a_boundaries`.
 
     Returns:
-      Array with shape `(layers + 1,) + surface_pressure.shape`.
+      Array with shape `(layers,) + surface_pressure.shape`.
     """
+    surface_pressure = jnp.asarray(surface_pressure)
     f = lambda sp: self.a_boundaries / sp + self.b_boundaries
     for _ in range(surface_pressure.ndim):
       f = jax.vmap(f, in_axes=-1, out_axes=-1)
@@ -266,7 +267,7 @@ class HybridCoordinates:
     """Returns centers of sigma levels for a given surface pressure.
 
     Args:
-      surface_pressure: float array of surface pressure values, in the same
+      surface_pressure: float or array of surface pressure values, in the same
         units as `a_boundaries`.
 
     Returns:
@@ -276,6 +277,35 @@ class HybridCoordinates:
     result = (boundaries[1:] + boundaries[:-1]) / 2
     assert result.shape == (self.layers,) + surface_pressure.shape
     return result
+
+  def to_approx_sigma_coords(
+      self, surface_pressure: float, layers: int
+  ) -> sigma_coordinates.SigmaCoordinates:
+    """Interpolate these hybrid coordinates to approximate sigma levels.
+
+    The resulting coordinates will typically not be equidistant.
+
+    Args:
+      surface_pressure: reference surface pressure to use for interpolation.
+      layers: number of sigma layers to return.
+
+    Returns:
+      New SigmaCoordinates object wih the requested number of layers.
+    """
+    original_bounds = self.get_sigma_boundaries(surface_pressure)
+    interpolated_bounds = jax.vmap(jnp.interp, (0, None, None))(
+        jnp.linspace(0, 1, num=layers + 1),
+        jnp.linspace(0, 1, num=self.layers + 1),
+        original_bounds,
+    )
+    interpolated_bounds = np.array(interpolated_bounds)
+    # Some hybrid coordinates (e.g., from UFS) start at a non-zero pressure
+    # level. It is not clear that this makes sense for Dinosaur, so to be safe,
+    # we set the first level to 0 (zero pressure) and the last level to 1
+    # (surface pressure).
+    interpolated_bounds[0] = 0.0
+    interpolated_bounds[-1] = 1.0
+    return sigma_coordinates.SigmaCoordinates(interpolated_bounds)
 
 
 @functools.partial(jax.jit, static_argnums=0)
