@@ -17,6 +17,7 @@ license = {file = "LICENSE"}
 requires-python = ">=3.10"
 # TODO(shoyer): thin these down
 dependencies = [
+    "dask",
     "fsspec",
     "jax",
     "jaxlib",

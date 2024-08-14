@@ -19,7 +19,6 @@ from typing import Any
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
 from dinosaur import coordinate_systems
 from dinosaur import horizontal_interpolation
 from dinosaur import layer_coordinates
@@ -33,7 +32,6 @@ from dinosaur import spherical_harmonic
 from dinosaur import time_integration
 from dinosaur import vertical_interpolation
 from dinosaur import xarray_utils
-
 import jax
 import numpy as np
 import pandas as pd
@@ -69,46 +67,49 @@ class XarrayUtilsTest(parameterized.TestCase):
     self.assertDictEqual(shape_structure(x), shape_structure(y))
 
   @parameterized.parameters(
-      dict(samples=2,
-           time_steps=3,
-           dt=0.6,
-           layers=8,
-           wavenumbers=32,
-           attrs=dict(g=9.80616)),
-      dict(samples=4,
-           time_steps=2,
-           dt=300.,
-           layers=2,
-           wavenumbers=32,
-           attrs=dict(a=9.80616, mean=10.5)),
+      dict(
+          samples=2,
+          time_steps=3,
+          dt=0.6,
+          layers=8,
+          wavenumbers=32,
+          attrs=dict(g=9.80616),
+      ),
+      dict(
+          samples=4,
+          time_steps=2,
+          dt=300.0,
+          layers=2,
+          wavenumbers=32,
+          attrs=dict(a=9.80616, mean=10.5),
+      ),
   )
   def test_primitive_eq_data_to_xarray(
-      self,
-      samples,
-      time_steps,
-      dt,
-      layers,
-      wavenumbers,
-      attrs
+      self, samples, time_steps, dt, layers, wavenumbers, attrs
   ):
     physics_specs = primitive_equations.PrimitiveEquationsSpecs.from_si()
     grid = spherical_harmonic.Grid.with_wavenumbers(
-        wavenumbers, radius=physics_specs.radius)
+        wavenumbers, radius=physics_specs.radius
+    )
     vertical_grid = sigma_coordinates.SigmaCoordinates.equidistant(layers)
     coords = coordinate_systems.CoordinateSystem(grid, vertical_grid)
 
     # creating state, trajectory and batch of trajectories to be converted.
     initial_state_fn, _ = primitive_equations_states.steady_state_jw(
-        coords, physics_specs)
+        coords, physics_specs
+    )
     state = initial_state_fn()
     state.tracers = {
         'test_tracer': primitive_equations_states.gaussian_scalar(
-            coords, physics_specs, amplitude=0.1)
+            coords, physics_specs, amplitude=0.1
+        )
     }
     trajectory = jax.tree.map(
-        lambda *args: np.stack(args), *([state,] * time_steps))
+        lambda *args: np.stack(args), *([state] * time_steps)
+    )
     batch_of_trajectories = jax.tree.map(
-        lambda *args: np.stack(args), *([trajectory,] * samples))
+        lambda *args: np.stack(args), *([trajectory] * samples)
+    )
     expected_grid_attrs = coords.asdict()
 
     with self.subTest('state_to_dataset_modal'):
@@ -119,12 +120,17 @@ class XarrayUtilsTest(parameterized.TestCase):
           xarray_utils.XR_SURFACE_NAME: 1,
       }
       ds = xarray_utils.data_to_xarray(
-          state.asdict(), sample_ids=None, times=None, coords=coords,
-          attrs=attrs)
+          state.asdict(),
+          sample_ids=None,
+          times=None,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_primitive_eq_data(
-          ds, tracers_to_include=('test_tracer',))
+          ds, tracers_to_include=('test_tracer',)
+      )
       self.assert_values_shape_equal(state, reconstruction)
 
     with self.subTest('trajectory_to_dataset_modal'):
@@ -137,12 +143,17 @@ class XarrayUtilsTest(parameterized.TestCase):
       }
       times = dt * np.arange(time_steps)
       ds = xarray_utils.data_to_xarray(
-          trajectory.asdict(), sample_ids=None, times=times, coords=coords,
-          attrs=attrs)
+          trajectory.asdict(),
+          sample_ids=None,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_primitive_eq_data(
-          ds, tracers_to_include=('test_tracer',))
+          ds, tracers_to_include=('test_tracer',)
+      )
       self.assert_values_shape_equal(trajectory, reconstruction)
 
     with self.subTest('trajectory_to_dataset_modal'):
@@ -157,12 +168,17 @@ class XarrayUtilsTest(parameterized.TestCase):
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
       ds = xarray_utils.data_to_xarray(
-          batch_of_trajectories.asdict(), sample_ids=sample_ids, times=times,
-          coords=coords, attrs=attrs)
+          batch_of_trajectories.asdict(),
+          sample_ids=sample_ids,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_primitive_eq_data(
-          ds, tracers_to_include=('test_tracer',))
+          ds, tracers_to_include=('test_tracer',)
+      )
       self.assert_values_shape_equal(batch_of_trajectories, reconstruction)
 
     with self.subTest('trajectory_to_dataset_nodal'):
@@ -177,44 +193,51 @@ class XarrayUtilsTest(parameterized.TestCase):
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
       nodal_batch_of_trajectories = jax.tree.map(
-          grid.to_nodal, batch_of_trajectories)
+          grid.to_nodal, batch_of_trajectories
+      )
       ds = xarray_utils.data_to_xarray(
-          nodal_batch_of_trajectories.asdict(), sample_ids=sample_ids,
-          times=times, coords=coords, attrs=attrs)
+          nodal_batch_of_trajectories.asdict(),
+          sample_ids=sample_ids,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_primitive_eq_data(
-          ds, tracers_to_include=('test_tracer',))
+          ds, tracers_to_include=('test_tracer',)
+      )
       self.assert_values_shape_equal(
-          nodal_batch_of_trajectories, reconstruction)
+          nodal_batch_of_trajectories, reconstruction
+      )
 
   @parameterized.parameters(
-      dict(samples=2,
-           time_steps=3,
-           dt=0.6,
-           layers=8,
-           wavenumbers=32,
-           attrs=dict(g=9.80616)),
-      dict(samples=4,
-           time_steps=2,
-           dt=300.,
-           layers=2,
-           wavenumbers=32,
-           attrs=dict(a=9.80616, mean=10.5)),
+      dict(
+          samples=2,
+          time_steps=3,
+          dt=0.6,
+          layers=8,
+          wavenumbers=32,
+          attrs=dict(g=9.80616),
+      ),
+      dict(
+          samples=4,
+          time_steps=2,
+          dt=300.0,
+          layers=2,
+          wavenumbers=32,
+          attrs=dict(a=9.80616, mean=10.5),
+      ),
   )
   def test_shallow_water_eq_data_to_xarray(
-      self,
-      samples,
-      time_steps,
-      dt,
-      layers,
-      wavenumbers,
-      attrs
+      self, samples, time_steps, dt, layers, wavenumbers, attrs
   ):
     physics_specs = shallow_water.ShallowWaterSpecs.from_si(
-        np.ones((layers,)) * scales.WATER_DENSITY)
+        np.ones((layers,)) * scales.WATER_DENSITY
+    )
     grid = spherical_harmonic.Grid.with_wavenumbers(
-        wavenumbers, radius=physics_specs.radius)
+        wavenumbers, radius=physics_specs.radius
+    )
     vertical_grid = layer_coordinates.LayerCoordinates(layers)
     coords = coordinate_systems.CoordinateSystem(grid, vertical_grid)
 
@@ -224,12 +247,15 @@ class XarrayUtilsTest(parameterized.TestCase):
     velocity_function = lambda lat: np.cos(lat) ** 2 / 5
     velocity = np.stack([velocity_function(lat)] * layers)
     state = shallow_water_states.multi_layer(
-        velocity, physics_specs.densities, coords)
+        velocity, physics_specs.densities, coords
+    )
 
     trajectory = jax.tree.map(
-        lambda *args: np.stack(args), *([state,] * time_steps))
+        lambda *args: np.stack(args), *([state] * time_steps)
+    )
     batch_of_trajectories = jax.tree.map(
-        lambda *args: np.stack(args), *([trajectory,] * samples))
+        lambda *args: np.stack(args), *([trajectory] * samples)
+    )
     expected_grid_attrs = coords.asdict()
 
     with self.subTest('state_to_dataset_modal'):
@@ -239,8 +265,12 @@ class XarrayUtilsTest(parameterized.TestCase):
           xarray_utils.XR_LEVEL_NAME: vertical_grid.layers,
       }
       ds = xarray_utils.data_to_xarray(
-          state.asdict(), sample_ids=None, times=None, coords=coords,
-          attrs=attrs)
+          state.asdict(),
+          sample_ids=None,
+          times=None,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_shallow_water_eq_data(ds)
@@ -255,8 +285,12 @@ class XarrayUtilsTest(parameterized.TestCase):
       }
       times = dt * np.arange(time_steps)
       ds = xarray_utils.data_to_xarray(
-          trajectory.asdict(), sample_ids=None, times=times, coords=coords,
-          attrs=attrs)
+          trajectory.asdict(),
+          sample_ids=None,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_shallow_water_eq_data(ds)
@@ -273,8 +307,12 @@ class XarrayUtilsTest(parameterized.TestCase):
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
       ds = xarray_utils.data_to_xarray(
-          batch_of_trajectories.asdict(), sample_ids=sample_ids, times=times,
-          coords=coords, attrs=attrs)
+          batch_of_trajectories.asdict(),
+          sample_ids=sample_ids,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_shallow_water_eq_data(ds)
@@ -291,15 +329,21 @@ class XarrayUtilsTest(parameterized.TestCase):
       times = dt * np.arange(time_steps)
       sample_ids = np.arange(samples)
       nodal_batch_of_trajectories = jax.tree.map(
-          grid.to_nodal, batch_of_trajectories)
+          grid.to_nodal, batch_of_trajectories
+      )
       ds = xarray_utils.data_to_xarray(
-          nodal_batch_of_trajectories.asdict(), sample_ids=sample_ids,
-          times=times, coords=coords, attrs=attrs)
+          nodal_batch_of_trajectories.asdict(),
+          sample_ids=sample_ids,
+          times=times,
+          coords=coords,
+          attrs=attrs,
+      )
       self._check_attrs(ds, expected_grid_attrs, attrs)
       self.assertDictEqual(dict(ds.sizes), expected_coords_sizes)
       reconstruction = xarray_utils.xarray_to_shallow_water_eq_data(ds)
       self.assert_values_shape_equal(
-          nodal_batch_of_trajectories, reconstruction)
+          nodal_batch_of_trajectories, reconstruction
+      )
 
   @parameterized.parameters(
       dict(integrator=time_integration.crank_nicolson_rk2),
@@ -313,35 +357,45 @@ class XarrayUtilsTest(parameterized.TestCase):
     outer_steps = 12
     physics_specs = primitive_equations.PrimitiveEquationsSpecs.from_si()
     grid = spherical_harmonic.Grid.with_wavenumbers(
-        wavenumbers, radius=physics_specs.radius)
+        wavenumbers, radius=physics_specs.radius
+    )
     vertical_grid = sigma_coordinates.SigmaCoordinates.equidistant(layers)
     coords = coordinate_systems.CoordinateSystem(grid, vertical_grid)
     dt = physics_specs.nondimensionalize(10 * scales.units.minute)
 
     # creating state, trajectory and batch of trajectories to be converted.
     initial_state_fn, aux_features = primitive_equations_states.steady_state_jw(
-        coords, physics_specs)
+        coords, physics_specs
+    )
     ref_temperatures = aux_features[xarray_utils.REF_TEMP_KEY]
     nodal_orography = aux_features[xarray_utils.OROGRAPHY]
     orography = primitive_equations.truncated_modal_orography(
-        nodal_orography, coords)
+        nodal_orography, coords
+    )
     state = initial_state_fn()
-    state = primitive_equations.StateWithTime(**state.asdict(), sim_time=0.)
+    state = primitive_equations.StateWithTime(**state.asdict(), sim_time=0.0)
     equation = primitive_equations.PrimitiveEquationsWithTime(
-        ref_temperatures, orography, coords, physics_specs)
+        ref_temperatures, orography, coords, physics_specs
+    )
     step_fn = integrator(equation, dt)
-    trajectory_fn = jax.jit(time_integration.trajectory_from_step(
-        step_fn, outer_steps, inner_steps, start_with_input=True))
+    trajectory_fn = jax.jit(
+        time_integration.trajectory_from_step(
+            step_fn, outer_steps, inner_steps, start_with_input=True
+        )
+    )
     _, state_trajectory = trajectory_fn(state)
     times = dt * inner_steps * np.arange(outer_steps)
     ds = xarray_utils.data_to_xarray(
-        state_trajectory.asdict(), sample_ids=None, times=times, coords=coords)
-    reconstructed = (
-        xarray_utils.xarray_to_primitive_equations_with_time_data(ds))
+        state_trajectory.asdict(), sample_ids=None, times=times, coords=coords
+    )
+    reconstructed = xarray_utils.xarray_to_primitive_equations_with_time_data(
+        ds
+    )
     with self.subTest('round_trip'):
       for actual, expected in zip(
           jax.tree_util.tree_leaves(reconstructed),
-          jax.tree_util.tree_leaves(state_trajectory.asdict())):
+          jax.tree_util.tree_leaves(state_trajectory.asdict()),
+      ):
         np.testing.assert_allclose(actual, expected)
     with self.subTest('simulation_time'):
       np.testing.assert_allclose(ds.time.values, ds.sim_time.values, atol=1e-6)
@@ -351,12 +405,14 @@ class XarrayUtilsTest(parameterized.TestCase):
     layers = 6
     physics_specs = primitive_equations.PrimitiveEquationsSpecs.from_si()
     grid = spherical_harmonic.Grid.with_wavenumbers(
-        wavenumbers, radius=physics_specs.radius)
+        wavenumbers, radius=physics_specs.radius
+    )
     vertical_grid = sigma_coordinates.SigmaCoordinates.equidistant(layers)
     coords = coordinate_systems.CoordinateSystem(grid, vertical_grid)
     # creating state to be converted.
     initial_state_fn, _ = primitive_equations_states.steady_state_jw(
-        coords, physics_specs)
+        coords, physics_specs
+    )
     state = initial_state_fn().asdict()
     state['tracers']['specific_humidity'] = state['divergence']  # mock tracer.
     renaming_dict = {  # dataset names: primitive equation state notation.
@@ -369,53 +425,87 @@ class XarrayUtilsTest(parameterized.TestCase):
     base_to_xarray_fn = xarray_utils.data_to_xarray
     base_from_xarray_fn = functools.partial(
         xarray_utils.xarray_to_primitive_eq_data,
-        tracers_to_include=('specific_humidity',))
+        tracers_to_include=('specific_humidity',),
+    )
     ds = xarray_utils.data_to_xarray_with_renaming(
-        state, to_xarray_fn=base_to_xarray_fn, renaming_dict=renaming_dict,
-        coords=coords, sample_ids=None, times=None)
+        state,
+        to_xarray_fn=base_to_xarray_fn,
+        renaming_dict=renaming_dict,
+        coords=coords,
+        sample_ids=None,
+        times=None,
+    )
     reconstructed = xarray_utils.xarray_to_data_with_renaming(
-        ds, xarray_to_data_fn=base_from_xarray_fn, renaming_dict=renaming_dict)
+        ds, xarray_to_data_fn=base_from_xarray_fn, renaming_dict=renaming_dict
+    )
     with self.subTest('dataset_names'):
       self.assertSameElements(ds.keys(), renaming_dict.keys())
     with self.subTest('round_trip'):
-      for actual, expected in zip(jax.tree_util.tree_leaves(reconstructed),
-                                  jax.tree_util.tree_leaves(state)):
+      for actual, expected in zip(
+          jax.tree_util.tree_leaves(reconstructed),
+          jax.tree_util.tree_leaves(state),
+      ):
         np.testing.assert_allclose(actual, expected)
 
   @parameterized.parameters(
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.T21(),
-          vertical_interpolation.PressureCoordinates([50, 100, 800])),
-           grid_type='CUBIC',),
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.T42(),
-          vertical_interpolation.PressureCoordinates([1, 30, 50, 900])),
-           grid_type='CUBIC',),
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.T21(latitude_spacing='equiangular'),
-          vertical_interpolation.PressureCoordinates([10, 1000, 2000])),
-           grid_type='CUBIC',),
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.T85(
-              latitude_spacing='equiangular_with_poles'),
-          vertical_interpolation.PressureCoordinates([10, 50, 500, 600, 900])),
-           grid_type='CUBIC',),
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.TL127(
-              latitude_spacing='equiangular_with_poles'),
-          vertical_interpolation.PressureCoordinates([10, 50, 500, 600, 900])),
-           grid_type='LINEAR',),
-      dict(coords=coordinate_systems.CoordinateSystem(
-          spherical_harmonic.Grid.TL31(),
-          vertical_interpolation.PressureCoordinates([10, 50, 500, 600, 900])),
-           grid_type='LINEAR',),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.T21(),
+              vertical_interpolation.PressureCoordinates([50, 100, 800]),
+          ),
+          grid_type='CUBIC',
+      ),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.T42(),
+              vertical_interpolation.PressureCoordinates([1, 30, 50, 900]),
+          ),
+          grid_type='CUBIC',
+      ),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.T21(latitude_spacing='equiangular'),
+              vertical_interpolation.PressureCoordinates([10, 1000, 2000]),
+          ),
+          grid_type='CUBIC',
+      ),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.T85(
+                  latitude_spacing='equiangular_with_poles'
+              ),
+              vertical_interpolation.PressureCoordinates(
+                  [10, 50, 500, 600, 900]
+              ),
+          ),
+          grid_type='CUBIC',
+      ),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.TL127(
+                  latitude_spacing='equiangular_with_poles'
+              ),
+              vertical_interpolation.PressureCoordinates(
+                  [10, 50, 500, 600, 900]
+              ),
+          ),
+          grid_type='LINEAR',
+      ),
+      dict(
+          coords=coordinate_systems.CoordinateSystem(
+              spherical_harmonic.Grid.TL31(),
+              vertical_interpolation.PressureCoordinates(
+                  [10, 50, 500, 600, 900]
+              ),
+          ),
+          grid_type='LINEAR',
+      ),
   )
   def test_coordinate_system_from_dataset(self, coords, grid_type):
     data_array = np.zeros(coords.nodal_shape)
     data_template = {'u': 0, 'v': 0, 'z': 0, 't': 0, 'tracers': {}}
     wb_data = jax.tree_util.tree_map(lambda x: data_array, data_template)
-    ds = xarray_utils.data_to_xarray(
-        wb_data, coords=coords, times=None)
+    ds = xarray_utils.data_to_xarray(wb_data, coords=coords, times=None)
     with self.subTest('using_metadata'):
       reconstructed = xarray_utils.coordinate_system_from_dataset(ds)
       self.assertEqual(reconstructed, coords)
@@ -428,15 +518,15 @@ class XarrayUtilsTest(parameterized.TestCase):
   def test_xarray_to_state_and_dynamic_covariate_data(self):
     coords = coordinate_systems.CoordinateSystem(
         spherical_harmonic.Grid.T21(),
-        vertical_interpolation.PressureCoordinates([50, 100, 800]))
+        vertical_interpolation.PressureCoordinates([50, 100, 800]),
+    )
     times = np.datetime64('1990-01-01') + np.arange(5) * np.timedelta64(1, 'h')
 
     # Construct xarray dataset from mock state data
     data_array = np.zeros((len(times),) + coords.nodal_shape)
     data_template = {'u': 0, 'v': 0, 'z': 0, 't': 0, 'tracers': {}}
     data = jax.tree_util.tree_map(lambda x: data_array, data_template)
-    ds_state = xarray_utils.data_to_xarray(
-        data, coords=coords, times=times)
+    ds_state = xarray_utils.data_to_xarray(data, coords=coords, times=times)
 
     # Construct xarray dataset from mock surface covariates
     data_array = np.zeros((len(times),) + coords.surface_nodal_shape)
@@ -444,7 +534,8 @@ class XarrayUtilsTest(parameterized.TestCase):
     data = jax.tree_util.tree_map(lambda x: data_array, data_template)
     data['sim_time'] = np.arange(5)  # expect nondim time in prepreocessed data
     ds_surface_covariates = xarray_utils.dynamic_covariate_data_to_xarray(
-        data, coords=coords, times=times)
+        data, coords=coords, times=times
+    )
 
     # Construct xarray dataset from mock volume covariates
     data_array = np.zeros((len(times),) + coords.nodal_shape)
@@ -452,20 +543,23 @@ class XarrayUtilsTest(parameterized.TestCase):
     data = jax.tree_util.tree_map(lambda x: data_array, data_template)
     data['sim_time'] = np.arange(5)  # expect nondim time in prepreocessed data
     ds_volume_covariates = xarray_utils.dynamic_covariate_data_to_xarray(
-        data, coords=coords, times=times)
+        data, coords=coords, times=times
+    )
 
     ds = xarray.merge([ds_state, ds_surface_covariates, ds_volume_covariates])
-    xarray_to_dynamic_covariate_data_fn = (
-        functools.partial(
-            xarray_utils.xarray_to_dynamic_covariate_data,
-            covariates_to_include=['sea_ice_cover', 'cloud_cover']))
+    xarray_to_dynamic_covariate_data_fn = functools.partial(
+        xarray_utils.xarray_to_dynamic_covariate_data,
+        covariates_to_include=['sea_ice_cover', 'cloud_cover'],
+    )
     state_data, covariate_data = (
         xarray_utils.xarray_to_state_and_dynamic_covariate_data(
             ds,
             xarray_to_state_data_fn=xarray_utils.xarray_to_weatherbench_data,
             xarray_to_dynamic_covariate_data_fn=(
-                xarray_to_dynamic_covariate_data_fn),
-        ))
+                xarray_to_dynamic_covariate_data_fn
+            ),
+        )
+    )
 
     with self.subTest('state data'):
       expected_keys = {'u', 'v', 'z', 't', 'tracers', 'diagnostics', 'sim_time'}
@@ -511,7 +605,8 @@ class XarrayUtilsTest(parameterized.TestCase):
         case 'pd':
           time_shift = pd.Timedelta(0, 'h')
       shifted_ds = xarray_utils.selective_temporal_shift(
-          input_ds, variables=['b', 'c'], time_shift=time_shift)
+          input_ds, variables=['b', 'c'], time_shift=time_shift
+      )
       xarray.testing.assert_equal(shifted_ds, input_ds)
 
     with self.subTest('empty variables list'):
@@ -523,7 +618,8 @@ class XarrayUtilsTest(parameterized.TestCase):
         case 'pd':
           time_shift = pd.Timedelta(1, 'h')
       shifted_ds = xarray_utils.selective_temporal_shift(
-          input_ds, variables=[], time_shift=time_shift)
+          input_ds, variables=[], time_shift=time_shift
+      )
       xarray.testing.assert_equal(shifted_ds, input_ds)
 
     with self.subTest('positive shift'):
@@ -537,7 +633,8 @@ class XarrayUtilsTest(parameterized.TestCase):
         case 'pd':
           time_shift = pd.Timedelta(1, 'h')
       shifted_ds = xarray_utils.selective_temporal_shift(
-          input_ds, variables=['b', 'c'], time_shift=time_shift)
+          input_ds, variables=['b', 'c'], time_shift=time_shift
+      )
       expected_shifted_ds = xarray.Dataset(
           data_vars=dict(
               a=(['time'], [41, 42, 43, 44]),  # unshifted
@@ -559,7 +656,8 @@ class XarrayUtilsTest(parameterized.TestCase):
         case 'pd':
           time_shift = pd.Timedelta(-2, 'h')
       shifted_ds = xarray_utils.selective_temporal_shift(
-          input_ds, variables=['b', 'c'], time_shift=time_shift)
+          input_ds, variables=['b', 'c'], time_shift=time_shift
+      )
       expected_shifted_ds = xarray.Dataset(
           data_vars=dict(
               a=(['time'], [40, 41, 42]),  # unshifted
@@ -656,8 +754,12 @@ class XarrayUtilsTest(parameterized.TestCase):
       filled_u = xarray_utils.fill_nan_with_nearest(ds_with_nan.u)
       xarray.testing.assert_identical(filled_u, filled_ds.u)
 
-  def test_regrid(self):
-
+  @parameterized.parameters(
+      dict(regridder_cls=horizontal_interpolation.BilinearRegridder),
+      dict(regridder_cls=horizontal_interpolation.ConservativeRegridder),
+      dict(regridder_cls=horizontal_interpolation.NearestRegridder),
+  )
+  def test_regrid_horizontal(self, regridder_cls):
     old_coords = coordinate_systems.CoordinateSystem(
         spherical_harmonic.Grid.TL31(),
         vertical_interpolation.PressureCoordinates([50, 100, 150]),
@@ -667,28 +769,76 @@ class XarrayUtilsTest(parameterized.TestCase):
         'u': rng.random(old_coords.nodal_shape),
         'v': rng.random(old_coords.surface_nodal_shape),
     }
-    ds = xarray_utils.data_to_xarray(
-        data_dict, coords=old_coords, times=None
-    ).rename({'lon': 'longitude', 'lat': 'latitude'}).squeeze('surface')
-
-    regridder = horizontal_interpolation.BilinearRegridder(
-        old_coords.horizontal,
-        spherical_harmonic.Grid.TL63(),
+    ds = (
+        xarray_utils.data_to_xarray(data_dict, coords=old_coords, times=None)
+        .rename({'lon': 'longitude', 'lat': 'latitude'})
+        .squeeze('surface')
     )
-    ds_regridded = xarray_utils.regrid(ds, regridder)
+
+    regridder = regridder_cls(
+        old_coords.horizontal, spherical_harmonic.Grid.TL63()
+    )
+    ds_regridded = xarray_utils.regrid_horizontal(ds, regridder)
     expected_sizes = {'latitude': 64, 'longitude': 128, 'level': 3}
     self.assertEqual(ds_regridded.sizes, expected_sizes)
 
-    u_regridded = xarray_utils.regrid(ds.u, regridder)
+    u_regridded = xarray_utils.regrid_horizontal(ds.u, regridder)
     xarray.testing.assert_identical(u_regridded, ds_regridded.u)
 
     ds_flipped = ds.isel(latitude=slice(None, None, -1))
-    ds_flipped_regridded = xarray_utils.regrid(ds_flipped, regridder)
+    ds_flipped_regridded = xarray_utils.regrid_horizontal(ds_flipped, regridder)
     xarray.testing.assert_identical(ds_flipped_regridded, ds_regridded)
 
     with self.assertRaisesRegex(ValueError, 'inconsistent latitude'):
-      xarray_utils.regrid(ds.assign(latitude=ds.latitude - 180), regridder)
+      xarray_utils.regrid_horizontal(
+          ds.assign(latitude=ds.latitude - 180), regridder
+      )
+
+  @parameterized.parameters(
+      dict(regridder_cls=vertical_interpolation.BilinearRegridder),
+      dict(regridder_cls=vertical_interpolation.ConservativeRegridder),
+  )
+  def test_regrid_vertical(self, regridder_cls):
+    old_coords = vertical_interpolation.HybridCoordinates(
+        a_boundaries=np.array([0, 400, 300, 0]),
+        b_boundaries=np.array([0, 0, 0.5, 1.0]),
+    )
+    new_coords = sigma_coordinates.SigmaCoordinates.equidistant(4)
+
+    with self.subTest('single time slice'):
+      surface_pressure = xarray.DataArray(
+          1000 * np.ones((10, 12)), dims=['longitude', 'latitude']
+      )
+      ds = xarray.Dataset(
+          {'u': (('z', 'longitude', 'latitude'), np.ones((3, 10, 12)))}
+      )
+
+      regridder = regridder_cls(old_coords, new_coords)
+      ds_regridded = xarray_utils.regrid_vertical(
+          ds, surface_pressure, regridder, dim='z'
+      )
+
+      expected_sizes = {'sigma': 4, 'longitude': 10, 'latitude': 12}
+      self.assertEqual(ds_regridded.sizes, expected_sizes)
+
+      expected_sigma = np.array([0.125, 0.375, 0.625, 0.875])
+      np.testing.assert_array_equal(ds_regridded['sigma'].data, expected_sigma)
+
+    with self.subTest('with leading time dimension'):
+      surface_pressure = xarray.DataArray(
+          1000 * np.ones((2, 10, 12)), dims=['time', 'longitude', 'latitude']
+      )
+      ds = xarray.Dataset({
+          'u': (('time', 'z', 'longitude', 'latitude'), np.ones((2, 3, 10, 12)))
+      })
+      regridder = regridder_cls(old_coords, new_coords)
+      ds_regridded = xarray_utils.regrid_vertical(
+          ds, surface_pressure, regridder, dim='z'
+      )
+      expected_sizes = {'time': 2, 'sigma': 4, 'longitude': 10, 'latitude': 12}
+      self.assertEqual(ds_regridded.sizes, expected_sizes)
 
 
 if __name__ == '__main__':
+  jax.config.update('jax_traceback_filtering', 'off')
   absltest.main()

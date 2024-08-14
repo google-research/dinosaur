@@ -18,6 +18,7 @@ import dataclasses
 import functools
 from typing import Any, Callable, Mapping, MutableMapping, Sequence, TypeVar
 
+import dask.array
 from dinosaur import coordinate_systems
 from dinosaur import horizontal_interpolation
 from dinosaur import layer_coordinates
@@ -67,15 +68,25 @@ XARRAY_DS_KEY = 'xarray_dataset'
 
 # Key names for static single-level variables
 # comment line has {long_name, short_name, units} from CDS.
-GEOPOTENTIAL_AT_SURFACE = 'geopotential_at_surface'  # Geopotential, z, m**2 s**-2
-HIGH_VEGETATION_COVER = 'high_vegetation_cover'  # High vegetation cover, cvh, (0 - 1)
+GEOPOTENTIAL_AT_SURFACE = (  # Geopotential, z, m**2 s**-2
+    'geopotential_at_surface'
+)
+HIGH_VEGETATION_COVER = (  # High vegetation cover, cvh, (0 - 1)
+    'high_vegetation_cover'
+)
 LAKE_COVER = 'lake_cover'  # Lake cover, cl, (0 - 1)
 LAKE_DEPTH = 'lake_depth'  # Lake total depth, dl, m
 LAND_SEA_MASK = 'land_sea_mask'  # Land-sea mask, lsm, (0 - 1)
-LOW_VEGETATION_COVER = 'low_vegetation_cover'  # Low vegetation cover, cvl, (0 - 1)
+LOW_VEGETATION_COVER = (  # Low vegetation cover, cvl, (0 - 1)
+    'low_vegetation_cover'
+)
 SOIL_TYPE = 'soil_type'  # Soil type, slt, ~
-TYPE_OF_HIGH_VEGETATION = 'type_of_high_vegetation'  # Type of high vegetation, tvh, ~
-TYPE_OF_LOW_VEGETATION = 'type_of_low_vegetation'  # Type of low vegetation, tvl, ~
+TYPE_OF_HIGH_VEGETATION = (  # Type of high vegetation, tvh, ~
+    'type_of_high_vegetation'
+)
+TYPE_OF_LOW_VEGETATION = (  # Type of low vegetation, tvl, ~
+    'type_of_low_vegetation'
+)
 single_level_static_vars = [
     GEOPOTENTIAL_AT_SURFACE,
     HIGH_VEGETATION_COVER,
@@ -90,14 +101,24 @@ single_level_static_vars = [
 
 # Key names for dynamic single-level variables
 # comment line has {long_name, short_name, units} from CDS.
-ICE_TEMPERATURE_LAYER_4 = 'ice_temperature_layer_4'  # Ice temperature layer 4, istl4, K
+ICE_TEMPERATURE_LAYER_4 = (  # Ice temperature layer 4, istl4, K
+    'ice_temperature_layer_4'
+)
 LAKE_ICE_DEPTH = 'lake_ice_depth'  # Lake ice total depth, licd, m
-LAKE_ICE_TEMPERATURE = 'lake_ice_temperature'  # Lake ice surface temperature, lict, K
+LAKE_ICE_TEMPERATURE = (  # Lake ice surface temperature, lict, K
+    'lake_ice_temperature'
+)
 SEA_ICE_COVER = 'sea_ice_cover'  # Sea ice area fraction, siconc, (0 - 1)
-SEA_SURFACE_TEMPERATURE = 'sea_surface_temperature'  # Sea surface temperature, sst, K
+SEA_SURFACE_TEMPERATURE = (  # Sea surface temperature, sst, K
+    'sea_surface_temperature'
+)
 SNOW_DEPTH = 'snow_depth'  # Snow depth, sd, m of water equivalent
-SOIL_TEMPERATURE_LEVEL_4 = 'soil_temperature_level_4'  # Soil temperature level 4, stl4, K
-VOLUMETRIC_SOIL_WATER_LAYER_4 = 'volumetric_soil_water_layer_4'  # Volumetric soil water layer 4, swvl4, m**3 m**-3
+SOIL_TEMPERATURE_LEVEL_4 = (  # Soil temperature level 4, stl4, K
+    'soil_temperature_level_4'
+)
+VOLUMETRIC_SOIL_WATER_LAYER_4 = (  # Volumetric soil water layer 4, swvl4, m**3 m**-3
+    'volumetric_soil_water_layer_4'
+)
 single_level_dynamic_vars = [
     ICE_TEMPERATURE_LAYER_4,
     LAKE_ICE_DEPTH,
@@ -126,8 +147,9 @@ GRID_REGISTRY = {
     'PressureCoordinates': vertical_interpolation.PressureCoordinates,
     'Grid': spherical_harmonic.Grid,
     'RealSphericalHarmonics': spherical_harmonic.RealSphericalHarmonics,
-    'RealSphericalHarmonicsWithZeroImag':
-        spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+    'RealSphericalHarmonicsWithZeroImag': (
+        spherical_harmonic.RealSphericalHarmonicsWithZeroImag
+    ),
     'ComplexSphericalHarmonics': spherical_harmonic.ComplexSphericalHarmonics,
 }
 
@@ -182,8 +204,7 @@ def open_dataset(
 
 
 def open_netcdf(
-    path: str,
-    max_parallel_reads: int | None = None, **kwargs
+    path: str, max_parallel_reads: int | None = None, **kwargs
 ) -> xarray.Dataset:
   """Load a dataset stored in NetCDF format."""
   del max_parallel_reads  # unused.
@@ -261,7 +282,7 @@ def _infer_dims_shape_and_coords(
       XR_LON_MODE_NAME: lon_k,
       XR_LAT_MODE_NAME: lat_k,
       XR_LEVEL_NAME: coords.vertical.centers,
-      **additional_coords
+      **additional_coords,
   }
   if times is not None:
     all_xr_coords[XR_TIME_NAME] = times
@@ -272,9 +293,11 @@ def _infer_dims_shape_and_coords(
   modal_shape = coords.horizontal.modal_shape
   nodal_shape = coords.horizontal.nodal_shape
   basic_shape_to_dims[(coords.vertical.layers,) + modal_shape] = (
-      (XR_LEVEL_NAME,) + MODAL_AXES_NAMES)
+      XR_LEVEL_NAME,
+  ) + MODAL_AXES_NAMES
   basic_shape_to_dims[(coords.vertical.layers,) + nodal_shape] = (
-      (XR_LEVEL_NAME,) + NODAL_AXES_NAMES)
+      XR_LEVEL_NAME,
+  ) + NODAL_AXES_NAMES
   basic_shape_to_dims[nodal_shape] = NODAL_AXES_NAMES
   basic_shape_to_dims[modal_shape] = MODAL_AXES_NAMES
   # Add unconventional shape for nodal covariate surface data, which have dim=2
@@ -316,8 +339,9 @@ def nodal_orography_from_ds(ds: xarray.Dataset) -> typing.Array:
   """Returns orography in nodal representation from `ds`."""
   orography_key = OROGRAPHY
   if orography_key not in ds:
-    ds[orography_key] = (ds[GEOPOTENTIAL_AT_SURFACE_KEY]
-                         / scales.GRAVITY_ACCELERATION.magnitude)
+    ds[orography_key] = (
+        ds[GEOPOTENTIAL_AT_SURFACE_KEY] / scales.GRAVITY_ACCELERATION.magnitude
+    )
   lon_lat_order = (XR_LON_NAME, XR_LAT_NAME)
   return ds[orography_key].transpose(*lon_lat_order).values
 
@@ -334,19 +358,23 @@ def coordinate_system_from_attrs(
 ) -> coordinate_systems.CoordinateSystem:
   """Creates a `CoordinateSystem` object based on `attrs`."""
   horizontal_coordinate_cls = GRID_REGISTRY[
-      attrs[coordinate_systems.HORIZONTAL_COORD_TYPE_KEY]]
+      attrs[coordinate_systems.HORIZONTAL_COORD_TYPE_KEY]
+  ]
   horizontal_attrs = {
       f.name: attrs[f.name]
-      for f in dataclasses.fields(horizontal_coordinate_cls)}
+      for f in dataclasses.fields(horizontal_coordinate_cls)
+  }
   horizontal_attrs.pop(spherical_harmonic.SPHERICAL_HARMONICS_IMPL_KEY, None)
   horizontal_attrs.pop(spherical_harmonic.SPMD_MESH_KEY, None)
   horizontal = horizontal_coordinate_cls(**horizontal_attrs)
   if coordinate_systems.VERTICAL_COORD_TYPE_KEY in attrs:
     vertical_coordinate_cls = GRID_REGISTRY[
-        attrs[coordinate_systems.VERTICAL_COORD_TYPE_KEY]]
+        attrs[coordinate_systems.VERTICAL_COORD_TYPE_KEY]
+    ]
     vertical_attrs = {
         f.name: attrs[f.name]
-        for f in dataclasses.fields(vertical_coordinate_cls)}
+        for f in dataclasses.fields(vertical_coordinate_cls)
+    }
     vertical = vertical_coordinate_cls(**vertical_attrs)
   else:
     vertical = None  # no vertical coordinate has been specified.
@@ -380,15 +408,20 @@ def data_to_xarray(
   # check that prognostic and tracer names do not collide;
   prognostic_keys = set(data.keys()) - {'tracers'} - {'diagnostics'}
   tracer_keys = data['tracers'].keys() if 'tracers' in data else set()
-  diagnostic_keys = (data['diagnostics'].keys() if 'diagnostics' in data
-                     else set())
+  diagnostic_keys = (
+      data['diagnostics'].keys() if 'diagnostics' in data else set()
+  )
   if not prognostic_keys.isdisjoint(tracer_keys):
-    raise ValueError('Tracer names collide with prognostic variables',
-                     f'Tracers: {tracer_keys}; prognostics: {prognostic_keys}')
+    raise ValueError(
+        'Tracer names collide with prognostic variables',
+        f'Tracers: {tracer_keys}; prognostics: {prognostic_keys}',
+    )
   if not prognostic_keys.isdisjoint(diagnostic_keys):
-    raise ValueError('Diagnostic names collide with prognostic variables',
-                     f'Diagnostic: {diagnostic_keys}; ',
-                     f'prognostics: {prognostic_keys}')
+    raise ValueError(
+        'Diagnostic names collide with prognostic variables',
+        f'Diagnostic: {diagnostic_keys}; ',
+        f'prognostics: {prognostic_keys}',
+    )
 
   if additional_coords is None:
     additional_coords = {}
@@ -407,7 +440,8 @@ def data_to_xarray(
     value = data[key]
     if value.shape not in shape_to_dims:
       raise ValueError(
-          f'Value of shape {value.shape} is not in {shape_to_dims=}')
+          f'Value of shape {value.shape} is not in {shape_to_dims=}'
+      )
     else:
       dims = shape_to_dims[value.shape]
       data_vars[key] = (dims, value)
@@ -439,11 +473,7 @@ def data_to_xarray(
     dataset_attrs.update(attrs)
   # only include coordinates for dimensions that are present in the dataset.
   coords = {k: v for k, v in all_coords.items() if k in dims_in_state}
-  return xarray.Dataset(
-      data_vars,
-      coords,
-      attrs=dataset_attrs
-  )
+  return xarray.Dataset(data_vars, coords, attrs=dataset_attrs)
 
 
 def dynamic_covariate_data_to_xarray(
@@ -472,7 +502,8 @@ def dynamic_covariate_data_to_xarray(
     additional_coords = {}
 
   all_coords, shape_to_dims = _infer_dims_shape_and_coords(
-      coords, times, sample_ids, additional_coords)
+      coords, times, sample_ids, additional_coords
+  )
 
   dims_in_state = set()  # keep track which coordinates should be included.
   data_vars = {}
@@ -494,11 +525,7 @@ def dynamic_covariate_data_to_xarray(
 
   # only include coordinates for dimensions that are present in the dataset.
   xr_coords = {k: v for k, v in all_coords.items() if k in dims_in_state}
-  return xarray.Dataset(
-      data_vars,
-      xr_coords,
-      attrs=dataset_attrs
-  )
+  return xarray.Dataset(data_vars, xr_coords, attrs=dataset_attrs)
 
 
 def xarray_to_data_dict(
@@ -546,7 +573,8 @@ def xarray_to_shallow_water_eq_data(
   return shallow_water.State(
       vorticity=getattr(dataset['vorticity'], values),
       divergence=getattr(dataset['divergence'], values),
-      potential=getattr(dataset['potential'], values),).asdict()
+      potential=getattr(dataset['potential'], values),
+  ).asdict()
 
 
 def xarray_to_primitive_eq_data(
@@ -573,8 +601,8 @@ def xarray_to_primitive_eq_data(
       divergence=getattr(dataset['divergence'], values),
       temperature_variation=getattr(dataset['temperature_variation'], values),
       log_surface_pressure=getattr(dataset['log_surface_pressure'], values),
-      tracers={k: getattr(dataset[k], values) for k in tracers_to_include}
-      ).asdict()
+      tracers={k: getattr(dataset[k], values) for k in tracers_to_include},
+  ).asdict()
 
 
 def xarray_to_primitive_equations_with_time_data(
@@ -602,7 +630,7 @@ def xarray_to_primitive_equations_with_time_data(
       temperature_variation=getattr(dataset['temperature_variation'], values),
       log_surface_pressure=getattr(dataset['log_surface_pressure'], values),
       sim_time=getattr(dataset['sim_time'], values),
-      tracers={k: getattr(dataset[k], values) for k in tracers_to_include}
+      tracers={k: getattr(dataset[k], values) for k in tracers_to_include},
   ).asdict()
 
 
@@ -657,8 +685,8 @@ def xarray_to_dynamic_covariate_data(
   """Returns `values` of dynamic covariate data with time from `dataset`.
 
   Args:
-    dataset: dataset from which to extract `values` attributes of the
-      dynamic covariates in dict representation.
+    dataset: dataset from which to extract `values` attributes of the dynamic
+      covariates in dict representation.
     values: attribute to extract. Typically is `values`, `dtype` or `shape`.
     covariates_to_include: names of covariates present in the `dataset` to
       include in the `dynamic_covariate_data`.
@@ -750,8 +778,13 @@ def data_to_xarray_with_renaming(
   """
   inverse_ranaming_dict = {v: k for k, v in renaming_dict.items()}
   ds = to_xarray_fn(
-      data, coords=coords, times=times, sample_ids=sample_ids,
-      additional_coords=additional_coords, attrs=attrs)
+      data,
+      coords=coords,
+      times=times,
+      sample_ids=sample_ids,
+      additional_coords=additional_coords,
+      attrs=attrs,
+  )
   return ds.rename(inverse_ranaming_dict)
 
 
@@ -826,15 +859,13 @@ def verify_grid_consistency(
   np.testing.assert_allclose(
       180 / np.pi * grid.longitudes, longitude, atol=1e-3
   )
-  np.testing.assert_allclose(
-      180 / np.pi * grid.latitudes, latitude, atol=1e-3
-  )
+  np.testing.assert_allclose(180 / np.pi * grid.latitudes, latitude, atol=1e-3)
 
 
 def selective_temporal_shift(
     dataset: xarray.Dataset,
     variables: Sequence[str] = tuple(),
-    time_shift: str|np.timedelta64|pd.Timedelta = '0 hour',
+    time_shift: str | np.timedelta64 | pd.Timedelta = '0 hour',
     time_name: str = 'time',
 ) -> xarray.Dataset:
   """Shifts specified variables in time and truncates associated time values.
@@ -877,6 +908,7 @@ def selective_temporal_shift(
       ds[var] = dataset.variables[var].isel({time_name: slice(-shift, None)})
   return ds
 
+
 xarray_selective_shift = selective_temporal_shift  # deprecated alias
 
 
@@ -887,8 +919,7 @@ def datetime64_to_nondim_time(
 ) -> np.ndarray:
   """Converts `time` in datetime64 format to nondimensional sim_time."""
   return physics_specs.nondimensionalize(
-      ((time - reference_datetime) / np.timedelta64(1, 'h'))
-      * scales.units.hour
+      ((time - reference_datetime) / np.timedelta64(1, 'h')) * scales.units.hour
   )
 
 
@@ -912,8 +943,10 @@ def ds_from_path_or_aux(
   aux_xarray_ds = aux_features.get(XARRAY_DS_KEY, None)
   if path is not None:
     if aux_xarray_ds is not None:
-      raise ValueError(f'Specifying both {path=} and {type(aux_xarray_ds)=} is '
-                       'error prone and not supported')
+      raise ValueError(
+          f'Specifying both {path=} and {type(aux_xarray_ds)=} is '
+          'error prone and not supported'
+      )
     return open_dataset(path)
   elif aux_xarray_ds is not None:
     return aux_xarray_ds
@@ -970,12 +1003,10 @@ def infer_longitude_offset(lon: np.ndarray | xarray.DataArray) -> float:
   return lon[0] * np.pi / 180
 
 
-def infer_latitude_spacing(
-    lat: np.ndarray | xarray.DataArray
-) -> str:
+def infer_latitude_spacing(lat: np.ndarray | xarray.DataArray) -> str:
   """Infers the type of latitude spacing given the latitude values."""
   if np.allclose(np.diff(lat), lat[1] - lat[0]):
-    if np.isclose(max(lat), 90.):
+    if np.isclose(max(lat), 90.0):
       spacing = 'equiangular_with_poles'
     else:
       spacing = 'equiangular'
@@ -1024,10 +1055,9 @@ def coordinate_system_from_dataset_shape(
 def coordinate_system_from_dataset(
     ds: xarray.Dataset,
     truncation: str = CUBIC,
-    spherical_harmonics_impl: Callable[
-        ..., spherical_harmonic.SphericalHarmonics
-    ]
-    | None = None,
+    spherical_harmonics_impl: (
+        Callable[..., spherical_harmonic.SphericalHarmonics] | None
+    ) = None,
     spmd_mesh: jax.sharding.Mesh | None = None,
 ) -> coordinate_systems.CoordinateSystem:
   """Creates a `CoordinateSystem` object based on `dataset`.
@@ -1141,9 +1171,7 @@ def fill_nan_with_nearest(data: DatasetOrDataArray) -> DatasetOrDataArray:
     return array
 
   if 'latitude' not in data.dims or 'longitude' not in data.dims:
-    raise ValueError(
-        f'did not find latitude and longitude dimensions: {data}'
-    )
+    raise ValueError(f'did not find latitude and longitude dimensions: {data}')
 
   if isinstance(data, xarray.DataArray):
     return fill_nan_for_array(data)
@@ -1164,24 +1192,36 @@ def ensure_ascending_latitude(data: DatasetOrDataArray) -> DatasetOrDataArray:
     raise ValueError(f'non-monotonic latitude: {latitude.data}')
 
 
-def regrid(
+def regrid_horizontal(
     data: DatasetOrDataArray,
     regridder: horizontal_interpolation.Regridder,
-    tolerance: float = 1e-3,
+    latlon_tolerance: float = 1e-3,
 ) -> DatasetOrDataArray:
-  """Horizontally regrid a dataset."""
+  """Horizontally regrid a dataset.
+
+  Args:
+    data: source data to regrid.
+    regridder: horizontal regridder to use. Must be consistent with the data
+      coordinates.
+    latlon_tolerance: maximum absolute difference (in degreees) between the
+      latitude and longitude coordinates of `data` and `regridder.source_grid`.
+
+  Returns:
+    Regridded data with the same variables and dimensions as `data`, but new
+    "latitude" and "longitude" coordinates.
+  """
 
   data = ensure_ascending_latitude(data)
 
   old_lon = np.rad2deg(regridder.source_grid.longitudes)
   old_lat = np.rad2deg(regridder.source_grid.latitudes)
 
-  if abs(old_lon - data.longitude.data).max() > tolerance:
+  if abs(old_lon - data.longitude.data).max() > latlon_tolerance:
     raise ValueError(
         'inconsistent longitude between data and source grid:'
         f' {data.longitude.data} vs {old_lon}'
     )
-  if abs(old_lat - data.latitude.data).max() > tolerance:
+  if abs(old_lat - data.latitude.data).max() > latlon_tolerance:
     raise ValueError(
         'inconsistent latitude between data and source grid:'
         f' {data.latitude.data} vs {old_lat}'
@@ -1199,3 +1239,78 @@ def regrid(
   data.coords['latitude'] = np.rad2deg(regridder.target_grid.latitudes)
 
   return data
+
+
+regrid = regrid_horizontal  # deprecated alias
+
+
+def regrid_vertical(
+    data: DatasetOrDataArray,
+    surface_pressure: xarray.DataArray,
+    regridder: vertical_interpolation.Regridder,
+    dim: str = 'hybrid',
+    compute_chunks: dict[str, int] | None = None,
+):
+  """Vertically regrid a dataset, from hybrid to sigma coordinates.
+
+  Args:
+    data: source data to regrid.
+    surface_pressure: array of surface pressure to use for regridding.
+    regridder: vertical regridder to use, with pressure units that are
+      consistent with `surface_pressure`.
+    dim: name of the vertical dimension in `data` to regrid.
+    compute_chunks: optional dict of chunk sizes to use for intermediate
+      chunking of the computation with dask.
+
+  Returns:
+    Regridded data with the same variables and dimensions as `data`, but with
+    `dim` replaced by "sigma".
+  """
+  if regridder.source_grid.layers != data.sizes[dim]:
+    raise ValueError(
+        'inconsistent vertical dimension size between data and source grid:'
+        f' {data.sizes[dim]} vs {regridder.source_grid.layers}'
+    )
+
+  if surface_pressure.dims[-2:] != ('longitude', 'latitude'):
+    raise ValueError(
+        f'surface_pressure.dims must end with {"longitude", "latitude"}, got'
+        f' {surface_pressure.dims}'
+    )
+
+  # We parallelize vertical regridding with dask in order to reduce peak memory
+  # usage and better utilize multiple cores. In practice the precise chunk size
+  # doesn't matter so much. The default of 32x32 chunking reduces memory usage
+  # by a factor of ~1000 for full resolution ERA5 data (1440x721) and still gets
+  # high CPU utilization.
+  if compute_chunks is None:
+    compute_chunks = {'latitude': 32, 'longitude': 32}
+
+  def regrid_chunk(field, surface_pressure):
+    chunks = list(field.chunks)
+    chunks[-3] = (regridder.target_grid.layers,)
+    return dask.array.map_blocks(
+        regridder,
+        field,
+        surface_pressure,
+        drop_axis=-3,
+        new_axis=-3,
+        chunks=chunks,
+        meta=np.array((), dtype=np.float32),
+    )
+
+  data = xarray.apply_ufunc(
+      regrid_chunk,
+      data.chunk(compute_chunks),
+      surface_pressure.chunk(compute_chunks),
+      input_core_dims=[
+          (dim, 'longitude', 'latitude'),
+          ('longitude', 'latitude'),
+      ],
+      output_core_dims=[('sigma', 'longitude', 'latitude')],
+      exclude_dims={dim},
+      dask='allowed',
+  )
+  data.coords['sigma'] = regridder.target_grid.centers
+
+  return data.compute()

@@ -127,15 +127,21 @@ class HybridCoordinatesTest(absltest.TestCase):
     )
 
     expected = np.array([0.0, 0.65, 1.0])
-    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=2)
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(
+        surface_pressure=1000, layers=2
+    )
     np.testing.assert_allclose(sigma_coords.boundaries, expected)
 
     expected = np.array([0.0, 0.5, 0.8, 1.0])
-    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=3)
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(
+        surface_pressure=1000, layers=3
+    )
     np.testing.assert_allclose(sigma_coords.boundaries, expected)
 
     expected = np.array([0.0, 0.25, 0.5, 0.65, 0.8, 0.9, 1.0])
-    sigma_coords = hybrid_coords.to_approx_sigma_coords(1000, layers=6)
+    sigma_coords = hybrid_coords.to_approx_sigma_coords(
+        surface_pressure=1000, layers=6
+    )
     np.testing.assert_allclose(sigma_coords.boundaries, expected)
 
   def test_interp_hybrid_to_sigma(self):

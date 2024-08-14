@@ -249,45 +249,38 @@ class HybridCoordinates:
     """Returns centers of sigma levels for a given surface pressure.
 
     Args:
-      surface_pressure: float or array of surface pressure values, in the same
-        units as `a_boundaries`.
+      surface_pressure: scalar surface pressure, in the same units as
+        `a_boundaries`.
 
     Returns:
-      Array with shape `(layers,) + surface_pressure.shape`.
+      Array with shape `(layers + 1,)`.
     """
-    surface_pressure = jnp.asarray(surface_pressure)
-    f = lambda sp: self.a_boundaries / sp + self.b_boundaries
-    for _ in range(surface_pressure.ndim):
-      f = jax.vmap(f, in_axes=-1, out_axes=-1)
-    result = f(surface_pressure)
-    assert result.shape == (self.layers + 1,) + surface_pressure.shape
-    return result
+    return self.a_boundaries / surface_pressure + self.b_boundaries
 
-  def get_sigma_centers(self, surface_pressure: typing.Array) -> typing.Array:
+  def get_sigma_centers(self, surface_pressure: typing.Numeric) -> typing.Array:
     """Returns centers of sigma levels for a given surface pressure.
 
     Args:
-      surface_pressure: float or array of surface pressure values, in the same
-        units as `a_boundaries`.
+      surface_pressure: scalar surface pressure, in the same units as
+        `a_boundaries`.
 
     Returns:
-      Array with shape `(layers,) + surface_pressure.shape`.
+      Array with shape `(layers,)`.
     """
     boundaries = self.get_sigma_boundaries(surface_pressure)
-    result = (boundaries[1:] + boundaries[:-1]) / 2
-    assert result.shape == (self.layers,) + surface_pressure.shape
-    return result
+    return (boundaries[1:] + boundaries[:-1]) / 2
 
   def to_approx_sigma_coords(
-      self, surface_pressure: float, layers: int
+      self, layers: int, surface_pressure: float = 1013.25
   ) -> sigma_coordinates.SigmaCoordinates:
     """Interpolate these hybrid coordinates to approximate sigma levels.
 
     The resulting coordinates will typically not be equidistant.
 
     Args:
-      surface_pressure: reference surface pressure to use for interpolation.
       layers: number of sigma layers to return.
+      surface_pressure: reference surface pressure to use for interpolation. The
+        default value is 1013.25, which is one standard atmosphere in hPa.
 
     Returns:
       New SigmaCoordinates object wih the requested number of layers.
@@ -402,14 +395,6 @@ def interp_sigma_to_pressure(
   return pytree_utils.tree_map_over_nonscalars(regrid, fields)
 
 
-@functools.partial(jnp.vectorize, signature='(a),(b,x,y),(b,x,y)->(a,x,y)')
-@functools.partial(jax.vmap, in_axes=(0, None, None), out_axes=0)
-@functools.partial(jax.vmap, in_axes=(None, -1, -1), out_axes=-1)
-@functools.partial(jax.vmap, in_axes=(None, -1, -1), out_axes=-1)
-def _vertical_interp_3d(x, xp, fp):
-  return _linear_interp_with_safe_extrap(x, xp, fp)
-
-
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def interp_hybrid_to_sigma(
     fields: typing.Pytree,
@@ -420,9 +405,20 @@ def interp_hybrid_to_sigma(
   """Interpolate 3D fields from hybrid to sigma levels."""
   # Linear interpolation from values at cell centers on hybrid levels to cell
   # centers on sigma levels. Here we interpolate on sigma coordinates.
-  source_sigmas = hybrid_coords.get_sigma_centers(surface_pressure)
-  regrid = lambda x: _vertical_interp_3d(sigma_coords.centers, source_sigmas, x)
-  return pytree_utils.tree_map_over_nonscalars(regrid, fields)
+
+  @jax.jit
+  @functools.partial(jnp.vectorize, signature='(x,y),(a),(b,x,y)->(a,x,y)')
+  @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
+  @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
+  def regrid(surface_pressure, target_sigmas, field):
+    source_sigmas = hybrid_coords.get_sigma_centers(surface_pressure)
+    return jax.vmap(_linear_interp_with_safe_extrap, in_axes=(0, None, None))(
+        target_sigmas, source_sigmas, field
+    )
+
+  return pytree_utils.tree_map_over_nonscalars(
+      lambda x: regrid(surface_pressure, sigma_coords.centers, x), fields
+  )
 
 
 def _interval_overlap(
@@ -472,24 +468,62 @@ def regrid_hybrid_to_sigma(
   # Here we are regridding in one dimension, so it only depends on the overlap
   # between cell boundaries. Here we calculate both bounds in terms of sigma
   # coordinates (from 0 to 1).
-  source_bounds = hybrid_coords.get_sigma_boundaries(surface_pressure)
-  target_bounds = sigma_coords.boundaries
 
+  # Note: c=a-1, but the signature argument does not support arithemtic in
+  # dimension specifications. This is verified via assert statements below.
   @jax.jit
-  @functools.partial(jnp.vectorize, signature='(a,x,y),(b),(c,x,y)->(d,x,y)')
+  @functools.partial(jnp.vectorize, signature='(x,y),(a),(b,x,y)->(c,x,y)')
   @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
   @functools.partial(jax.vmap, in_axes=(-1, None, -1), out_axes=-1)
-  def regrid(source_bounds, target_bounds, field):
-    if fields.shape[0] != hybrid_coords.layers:
+  def regrid(surface_pressure, sigma_bounds, field):
+    assert sigma_bounds.shape == (sigma_coords.layers + 1,)
+    if field.shape[0] != hybrid_coords.layers:
       raise ValueError(
           f'Source has {hybrid_coords.layers} layers, but field has'
           f' {fields.shape[0]}'
       )
-    weights = conservative_regrid_weights(source_bounds, target_bounds)
+    hybrid_bounds = hybrid_coords.get_sigma_boundaries(surface_pressure)
+    weights = conservative_regrid_weights(hybrid_bounds, sigma_bounds)
     result = jnp.einsum('ab,b->a', weights, field, precision='float32')
     assert result.shape[0] == sigma_coords.layers
     return result
 
   return pytree_utils.tree_map_over_nonscalars(
-      lambda x: regrid(source_bounds, target_bounds, x), fields
+      lambda x: regrid(surface_pressure, sigma_coords.boundaries, x), fields
   )
+
+
+@dataclasses.dataclass(frozen=True)
+class Regridder:
+  """Regrid vertically, from hybrid to sigma coordinates."""
+
+  # TODO(shoyer): support more generic vertical coordinate systems.
+  source_grid: HybridCoordinates
+  target_grid: sigma_coordinates.SigmaCoordinates
+
+  def __call__(
+      self, field: typing.Array, surface_pressure: typing.Array
+  ) -> jnp.ndarray:
+    raise NotImplementedError
+
+
+class ConservativeRegridder(Regridder):
+  """Regrid with conservative interpolation."""
+
+  def __call__(
+      self, field: typing.Array, surface_pressure: typing.Array
+  ) -> jnp.ndarray:
+    return regrid_hybrid_to_sigma(
+        field, self.source_grid, self.target_grid, surface_pressure
+    )
+
+
+class BilinearRegridder(Regridder):
+  """Regrid with bilinear interpolation."""
+
+  def __call__(
+      self, field: typing.Array, surface_pressure: typing.Array
+  ) -> jnp.ndarray:
+    return interp_hybrid_to_sigma(
+        field, self.source_grid, self.target_grid, surface_pressure
+    )
