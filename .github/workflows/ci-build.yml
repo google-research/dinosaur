@@ -40,7 +40,8 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
     - name: Install Dinosaur
       run: |
-        pip install -e .[tests]
+        pip install -e .[tests,xarray-utils]
     - name: Run unit tests
+      # TODO(shoyer): re-enable regrid_test once we figure out how to install Beam on GitHub actions
       run: |
-        pytest -v dinosaur
+        pytest -v dinosaur --ignore=dinosaur/pipelines

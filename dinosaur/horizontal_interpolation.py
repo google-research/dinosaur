@@ -186,6 +186,7 @@ class Regridder:
     raise NotImplementedError
 
 
+@dataclasses.dataclass(frozen=True)
 class BilinearRegridder(Regridder):
   """Regrid with bilinear interpolation."""
 
@@ -211,6 +212,7 @@ class BilinearRegridder(Regridder):
     return field
 
 
+@dataclasses.dataclass(frozen=True)
 class NearestRegridder(Regridder):
   """Regrid with nearest neighbor interpolation."""
 
@@ -235,27 +237,19 @@ class NearestRegridder(Regridder):
     return interp(field)
 
 
+@dataclasses.dataclass(frozen=True)
 class ConservativeRegridder(Regridder):
-  """Regrid with linear conservative regridding."""
+  """Regrid with linear conservative regridding.
 
-  def __init__(
-      self,
-      source_grid: spherical_harmonic.Grid,
-      target_grid: spherical_harmonic.Grid,
-      skipna: bool = False,
-  ):
-    """Initializes a ConservativeRegridder.
-
-    Args:
-      source_grid: Grid used for inputs.
-      target_grid: Grid used for outputs.
-      skipna: Whether to ignore nan values when interpolating. If True, acts
-        like numpy nanmean and ignores NaN values when computing the mean of
-        neighboring points. Returns NaN wherever all neighboring points are Nan.
-        If False, cells will be NaN wherever any neighboring point is NaN.
-    """
-    super().__init__(source_grid, target_grid)
-    self._skipna = skipna
+  Parameters:
+    source_grid: Grid used for inputs.
+    target_grid: Grid used for outputs.
+    skipna: Whether to ignore nan values when interpolating. If True, acts
+      like numpy nanmean and ignores NaN values when computing the mean of
+      neighboring points. Returns NaN wherever all neighboring points are Nan.
+      If False, cells will be NaN wherever any neighboring point is NaN.
+  """
+  skipna: bool = False
 
   @functools.cached_property
   def lat_weights(self):
@@ -291,7 +285,7 @@ class ConservativeRegridder(Regridder):
     not_nulls = jnp.logical_not(jnp.isnan(field))
     mean = self._mean(jnp.where(not_nulls, field, 0))
     not_null_fraction = self._mean(not_nulls)
-    if self._skipna:
+    if self.skipna:
       return mean / not_null_fraction  # intended NaN if not_null_fraction == 0
     else:
       return jnp.where(

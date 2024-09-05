@@ -507,6 +507,7 @@ class Regridder:
     raise NotImplementedError
 
 
+@dataclasses.dataclass(frozen=True)
 class ConservativeRegridder(Regridder):
   """Regrid with conservative interpolation."""
 
@@ -518,6 +519,7 @@ class ConservativeRegridder(Regridder):
     )
 
 
+@dataclasses.dataclass(frozen=True)
 class BilinearRegridder(Regridder):
   """Regrid with bilinear interpolation."""
 

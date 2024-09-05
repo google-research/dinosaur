@@ -1272,12 +1272,6 @@ def regrid_vertical(
         f' {data.sizes[dim]} vs {regridder.source_grid.layers}'
     )
 
-  if surface_pressure.dims[-2:] != ('longitude', 'latitude'):
-    raise ValueError(
-        f'surface_pressure.dims must end with {"longitude", "latitude"}, got'
-        f' {surface_pressure.dims}'
-    )
-
   # We parallelize vertical regridding with dask in order to reduce peak memory
   # usage and better utilize multiple cores. In practice the precise chunk size
   # doesn't matter so much. The default of 32x32 chunking reduces memory usage
