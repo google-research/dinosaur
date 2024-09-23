@@ -65,6 +65,7 @@ class BarotropicInstabilityTest(parameterized.TestCase):
     latitude = np.linspace(-np.pi / 2, np.pi / 2, 101)
     zonal_velocity = shallow_water_states.get_zonal_velocity(
         latitude, parameters)
+    atol = np.finfo(np.float32).eps
 
     with self.subTest('IsZeroOutsideJet'):
       outside_jet = ((latitude > parameters.jet_northern_lat)
@@ -72,14 +73,17 @@ class BarotropicInstabilityTest(parameterized.TestCase):
       np.testing.assert_allclose(outside_jet * zonal_velocity, 0)
 
     with self.subTest('IsBoundedByMaxVelocity'):
-      assert_array_less_equal(np.abs(zonal_velocity),
-                              parameters.jet_max_velocity)
+      assert_array_less_equal(
+          np.abs(zonal_velocity), parameters.jet_max_velocity + atol
+      )
 
     with self.subTest('AttainsMaxVelocityAtJetCenter'):
       center = (parameters.jet_northern_lat + parameters.jet_southern_lat) / 2
       center_velocity = shallow_water_states.get_zonal_velocity(
           center, parameters)
-      np.testing.assert_allclose(center_velocity, parameters.jet_max_velocity)
+      np.testing.assert_allclose(
+          center_velocity, parameters.jet_max_velocity, atol=atol
+      )
 
   @parameterized.parameters(
       dict(seed=0),
