@@ -17,9 +17,7 @@
 import functools
 from absl.testing import absltest
 from absl.testing import parameterized
-
 from dinosaur import spherical_harmonic
-
 import jax
 from jax import config
 import jax.numpy as jnp
@@ -48,39 +46,32 @@ def random_modal_state(grid, seed=0):
 
 class SphericalHarmonicTest(parameterized.TestCase):
 
-  @parameterized.product(
-      params=[
-          dict(
-              longitude_nodes=64,
-              latitude_nodes=32,
-              longitude_wavenumbers=32,
-              total_wavenumbers=32,
-              latitude_spacing='gauss',
-          ),
-          dict(
-              longitude_nodes=117,
-              latitude_nodes=13,
-              longitude_wavenumbers=45,
-              total_wavenumbers=123,
-              latitude_spacing='equiangular',
-          ),
-          dict(
-              longitude_nodes=117,
-              latitude_nodes=13,
-              longitude_wavenumbers=45,
-              total_wavenumbers=123,
-              latitude_spacing='equiangular_with_poles',
-          ),
-      ],
-      impl=[
-          # RealSphericalHarmonicsWithZeroImag uses a different convention
-          spherical_harmonic.RealSphericalHarmonics,
-          spherical_harmonic.ComplexSphericalHarmonics,
-      ],
+  @parameterized.parameters(
+      dict(
+          longitude_nodes=64,
+          latitude_nodes=32,
+          longitude_wavenumbers=32,
+          total_wavenumbers=32,
+          latitude_spacing='gauss',
+      ),
+      dict(
+          longitude_nodes=117,
+          latitude_nodes=13,
+          longitude_wavenumbers=45,
+          total_wavenumbers=123,
+          latitude_spacing='equiangular',
+      ),
+      dict(
+          longitude_nodes=117,
+          latitude_nodes=13,
+          longitude_wavenumbers=45,
+          total_wavenumbers=123,
+          latitude_spacing='equiangular_with_poles',
+      ),
   )
-  def testBasisShapes(self, params, impl):
+  def testBasisShapes(self, **params):
     """Tests that the arrays provided by `basis` have the expected shape."""
-    spherical_harmonics = impl(**params)
+    spherical_harmonics = spherical_harmonic.RealSphericalHarmonics(**params)
     basis = spherical_harmonics.basis
     longitude_nodes = params['longitude_nodes']
     latitude_nodes = params['latitude_nodes']
@@ -99,8 +90,7 @@ class GridTest(parameterized.TestCase):
       latitude_spacing=('gauss', 'equiangular'),
       impl=[
           spherical_harmonic.RealSphericalHarmonics,
-          spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
-          spherical_harmonic.ComplexSphericalHarmonics,
+          spherical_harmonic.FastSphericalHarmonics,
       ],
   )
   def testGridShape(self, wavenumbers, latitude_spacing, impl):
@@ -179,7 +169,7 @@ class GridTest(parameterized.TestCase):
           latitude_spacing='equiangular',
           jit=True,
           seed=0,
-          spherical_harmonics_impl=spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+          spherical_harmonics_impl=spherical_harmonic.FastSphericalHarmonics,
       ),
       dict(
           longitude_wavenumbers=64,
@@ -188,18 +178,10 @@ class GridTest(parameterized.TestCase):
           jit=True,
           seed=0,
           spherical_harmonics_impl=functools.partial(
-              spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+              spherical_harmonic.FastSphericalHarmonics,
               base_shape_multiple=8,
               reverse_einsum_arg_order=True,
           ),
-      ),
-      dict(
-          longitude_wavenumbers=64,
-          total_wavenumbers=64,
-          latitude_spacing='equiangular_with_poles',
-          jit=True,
-          seed=0,
-          spherical_harmonics_impl=spherical_harmonic.ComplexSphericalHarmonics,
       ),
   )
   def testRoundTrip(
@@ -242,8 +224,7 @@ class GridTest(parameterized.TestCase):
       seed=(0,),
       impl=[
           spherical_harmonic.RealSphericalHarmonics,
-          spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
-          spherical_harmonic.ComplexSphericalHarmonics,
+          spherical_harmonic.FastSphericalHarmonics,
       ],
   )
   def testLaplacianRoundTrip(self, wavenumbers, latitude_spacing, seed, impl):
@@ -267,8 +248,7 @@ class GridTest(parameterized.TestCase):
       test_function=(_function_0, _function_1),
       impl=[
           spherical_harmonic.RealSphericalHarmonics,
-          spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
-          spherical_harmonic.ComplexSphericalHarmonics,
+          spherical_harmonic.FastSphericalHarmonics,
       ],
   )
   def testDerivatives(
@@ -405,7 +385,7 @@ class GridTest(parameterized.TestCase):
       dict(
           grid=spherical_harmonic.Grid.with_wavenumbers(
               128,
-              spherical_harmonics_impl=spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+              spherical_harmonics_impl=spherical_harmonic.FastSphericalHarmonics,
           ),
           atol=1e-11,
           seed=0,
@@ -414,19 +394,11 @@ class GridTest(parameterized.TestCase):
           grid=spherical_harmonic.Grid.with_wavenumbers(
               128,
               spherical_harmonics_impl=functools.partial(
-                  spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+                  spherical_harmonic.FastSphericalHarmonics,
                   transform_precision='float32',
-              )
+              ),
           ),
           atol=1e-11,
-          seed=0,
-      ),
-      dict(
-          grid=spherical_harmonic.Grid.with_wavenumbers(
-              128,
-              spherical_harmonics_impl=spherical_harmonic.ComplexSphericalHarmonics,
-          ),
-          atol=1e-10,
           seed=0,
       ),
       dict(
@@ -541,8 +513,7 @@ class GridTest(parameterized.TestCase):
       ],
       impl=[
           spherical_harmonic.RealSphericalHarmonics,
-          spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
-          spherical_harmonic.ComplexSphericalHarmonics,
+          spherical_harmonic.FastSphericalHarmonics,
       ],
   )
   def testIntegrationSphericalHarmonics(self, params, impl):

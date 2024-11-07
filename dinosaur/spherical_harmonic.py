@@ -81,11 +81,10 @@ class SphericalHarmonics:
   Attributes:
     longitude_wavenumbers: the maximum (exclusive) wavenumber in the
       longitudinal direction. Indexes along longitudinal wavenumber are
-      typically denoted by `m`. Must satisfy `longitude_wavenumbers <=
-      total_wavenumbers`.
+      typically denoted by `m`.
     total_wavenumbers: the maximum (exclusive) sum of the latitudinal and
       longitudinal wavenumbers. Indices along total wavenumber are typically
-      denoted by `l`. Must satisfy `longitude_wavenumbers <= total_wavenumbers`.
+      denoted by `l`.
     longitude_nodes: the number of nodes in the longitudinal direction. The
       selected nodes will be the equally spaced points in [0, 2π).
     latitude_nodes: the number of nodes in the latitudinal direction. The
@@ -161,7 +160,21 @@ class SphericalHarmonics:
 
 
 class RealSphericalHarmonics(SphericalHarmonics):
-  """Real-valued spherical harmonics transforms."""
+  """Pedagogical implementation of spherical harmonics transforms.
+
+  This transform represents spherical harmonic (modal) coefficients as a two
+  dimensional grid of longtitudinal wavenumber (m) and total wavenumber (l)
+  values:
+      m = [0, +1, -1, +2, -2, ..., +M, -M]
+      l = [0, 1, 2, ..., L]
+  where `M = longitude_wavenumbers - 1` and `L = total_wavenumbers`.
+
+  Entries with `abs(m) > l` are structural zeros,
+
+  For better performance when using computing forward and inverse transforms,
+  but no guaranteed stable representation, use FastSphericalHarmonics, which
+  also supports parallelism.
+  """
 
   @functools.cached_property
   def nodal_axes(self) -> tuple[np.ndarray, np.ndarray]:
@@ -324,9 +337,9 @@ def _fourier_derivative_for_real_basis_with_zero_imag(
   if mesh is None:
     return fourier.real_basis_derivative_with_zero_imag(x, axis=-2)
 
-  # RealSphericalHarmonicsWithZeroImage always pads longitudinal frequencies by
-  # a multiple of two times the number of X shards, so we can safely
-  # differentiate without any distributed communication.
+  # FastHarmonicsWithZeroImage always pads longitudinal frequencies by a
+  # multiple of two times the number of X shards, so we can safely differentiate
+  # without any distributed communication.
 
   def differentiate(u):
     axis = -2
@@ -352,6 +365,9 @@ def _transform_einsum(
     precision: str,
 ) -> jax.Array:
   """einsum for calculating Fourier and Legendre transforms."""
+  if mesh is None:
+    return jnp.einsum(subscripts, lhs, rhs, precision=precision)
+
   out_ndim = len(
       jax.eval_shape(functools.partial(jnp.einsum, subscripts), lhs, rhs).shape
   )
@@ -370,7 +386,10 @@ def _transform_einsum(
     in_spec = P(z, None, 'x', 'y') if rhs.ndim == 4 else P(z, 'x', 'y')
     out_spec = P(z, None, 'x', 'y') if out_ndim == 4 else P(z, 'x', 'y')
   else:
-    raise ValueError(f'only 0 or 1 dimensions supported for ...: {subscripts}')
+    raise ValueError(
+        'only 0 or 1 dimensions supported for ... when using a mesh:'
+        f' {subscripts}'
+    )
 
   return jax_numpy_utils.sharded_einsum(
       subscripts,
@@ -385,12 +404,16 @@ def _transform_einsum(
 
 
 @dataclasses.dataclass(frozen=True)
-class RealSphericalHarmonicsWithZeroImag(SphericalHarmonics):
-  """Real-valued spherical harmonics with an extra imaginary part for m=-0.
+class FastSphericalHarmonics(SphericalHarmonics):
+  """Fast implementation of spherical harmonic transformation.
 
-  This can be more efficient because the array of Legendre transform
-  coefficients is the same for positive and negative coefficients, so this
-  halves the size of the `p` array on the MXU.
+  No stability guarantees are made about the shapes of arrays in the modal
+  representation.
+
+  Currently uses an extra imaginary term for m=-0. This can be more efficient
+  because the array of Legendre transform coefficients is the same for positive
+  and negative coefficients, so this halves the size of the `p` array on the
+  MXU.
 
   This version of spherical harmonics also supports model parallelism, if
   `spmd_mesh` is provided. The additional optional arguments allow for low-level
@@ -498,6 +521,25 @@ class RealSphericalHarmonicsWithZeroImag(SphericalHarmonics):
 
   @functools.cached_property
   def basis(self) -> _SphericalHarmonicBasis:
+    # The product of the arrays `f` and `p` gives the real normalized spherical
+    # harmonic basis evaluated on a grid of longitudes λ and latitudes θ:
+    #
+    #   f[i, 2m    ]  p[2m,     j, l] = cₗₘ cos(m λᵢ) Pᵐₗ(sin θⱼ)
+    #   f[i, 2m + 1]  p[2m + 1, j, l] = cₗₘ sin(m λᵢ) Pᵐₗ(sin θⱼ)
+    #
+    # where the constants cₗₘ are chosen such that each function has unit L²
+    # norm on the unit sphere. The longitudes λᵢ are `longitude_nodes` equally
+    # spaced points in [0, 2π). The latitude nodes θⱼ are chosen such that
+    # (sin θⱼ) are the Gauss-Legendre quadrature points if
+    # `latitude_spacing = 'gauss'`, or θⱼ are `latitude_nodes` equally spaced
+    # points if `latitude_spacing = 'equiangular'` (or
+    # `'equiangular_with_poles'` for equally spaced points including points at
+    # the poles).
+    #
+    # The shapes of the returned arrays are
+    #
+    #   f.shape == (longitude_nodes, 2*longitude_wavenumbers)
+    #   p.shape == (2*longitude_wavenumbers, latitude_nodes, total_wavenumbers)
     nodal_pad_x, nodal_pad_y = self.nodal_padding
     modal_pad_x, modal_pad_y = self.modal_padding
 
@@ -535,6 +577,8 @@ class RealSphericalHarmonicsWithZeroImag(SphericalHarmonics):
         'mjl,...sml->...smj', p, x, mesh, *einsum_args
     )
     if self.stacked_fourier_transforms:
+      # note: explicit matrix multiplication seems to be faster than using an
+      # explicit FFT at the resolutions we use.
       x = jax.named_call(_transform_einsum, name='inv_fourier')(
           'ism,...smj->...ij', f, x, mesh, *einsum_args
       )
@@ -573,94 +617,8 @@ class RealSphericalHarmonicsWithZeroImag(SphericalHarmonics):
 
 
 @dataclasses.dataclass(frozen=True)
-class ComplexSphericalHarmonics(SphericalHarmonics):
-  """Complex valued spherical harmonics transforms.
-
-  This works fine, but in practice is considerably slower (at least on TPUs)
-  than real-values spherical harmonics transformations, probably because XLA's
-  code generation for complex numbers is not well optimized.
-  """
-
-  @functools.cached_property
-  def nodal_axes(self) -> tuple[np.ndarray, np.ndarray]:
-    longitude, _ = fourier.quadrature_nodes(self.longitude_nodes)
-    sin_latitude, _ = get_latitude_nodes(
-        self.latitude_nodes, self.latitude_spacing
-    )
-    return longitude, sin_latitude
-
-  @functools.cached_property
-  def nodal_shape(self) -> tuple[int, int]:
-    return (self.longitude_nodes, self.latitude_nodes)
-
-  @functools.cached_property
-  def nodal_padding(self) -> tuple[int, int]:
-    return (0, 0)
-
-  @functools.cached_property
-  def modal_axes(self) -> tuple[np.ndarray, np.ndarray]:
-    lon_wavenumbers = np.arange(self.longitude_wavenumbers)
-    tot_wavenumbers = np.arange(self.total_wavenumbers)
-    return lon_wavenumbers, tot_wavenumbers
-
-  @functools.cached_property
-  def modal_shape(self) -> tuple[int, int]:
-    return (self.longitude_wavenumbers, self.total_wavenumbers)
-
-  @functools.cached_property
-  def modal_padding(self) -> tuple[int, int]:
-    return (0, 0)
-
-  @functools.cached_property
-  def modal_dtype(self) -> np.dtype:
-    return np.dtype(np.complex64)
-
-  @functools.cached_property
-  def mask(self) -> np.ndarray:
-    m, l = np.meshgrid(*self.modal_axes, indexing='ij')
-    return m <= l
-
-  @functools.cached_property
-  def basis(self) -> _SphericalHarmonicBasis:
-    f = fourier.complex_basis(
-        wavenumbers=self.longitude_wavenumbers,
-        nodes=self.longitude_nodes,
-    )
-    _, wf = fourier.quadrature_nodes(self.longitude_nodes)
-    x, wp = get_latitude_nodes(self.latitude_nodes, self.latitude_spacing)
-    w = wf * wp
-    p = associated_legendre.evaluate(
-        n_m=self.longitude_wavenumbers, n_l=self.total_wavenumbers, x=x
-    )
-    return _SphericalHarmonicBasis(f=f, p=p, w=w)
-
-  def inverse_transform(self, x):
-    p = self.basis.p
-    f = self.basis.f
-    px = jax.named_call(einsum, name='inv_legendre')('mjl,...ml->...mj', p, x)
-    fpx_from_real = jax.named_call(einsum, name='inv_fourier_from_real')(
-        'im,...mj->...ij', jnp.real(f), jnp.real(px)
-    )
-    fpx_from_imag = jax.named_call(einsum, name='inv_fourier_from_imag')(
-        'im,...mj->...ij', -jnp.imag(f), jnp.imag(px)
-    )
-    return fpx_from_real + fpx_from_imag
-
-  def transform(self, x):
-    w = self.basis.w
-    f = self.basis.f
-    p = self.basis.p
-    wx = w * x
-    fwx = jax.named_call(einsum, name='fwd_fourier')(
-        'im,...ij->...mj', jnp.conj(f), wx
-    )
-    pfwx = jax.named_call(einsum, name='fwd_legendre')(
-        'mjl,...mj->...ml', p, fwx
-    )
-    return pfwx
-
-  def longitudinal_derivative(self, x: Array) -> Array:
-    return fourier.complex_basis_derivative(x, axis=-2)
+class RealSphericalHarmonicsWithZeroImag(FastSphericalHarmonics):
+  """Deprecated alias for `FastSphericalHarmonics`."""
 
 
 def _vertical_pad(
@@ -697,6 +655,7 @@ def _with_vertical_padding(
   Returns:
     Function that can be applied to non-padded arrays.
   """
+
   def g(x):
     x, padding = _vertical_pad(x, mesh)
     return _vertical_crop(f(x), padding)
@@ -772,9 +731,7 @@ class Grid:
             "mesh is missing one or more of the required axis names 'x' and "
             f"'y': {self.spmd_mesh}"
         )
-      assert isinstance(
-          self.spherical_harmonics, RealSphericalHarmonicsWithZeroImag
-      )
+      assert isinstance(self.spherical_harmonics, FastSphericalHarmonics)
 
   @classmethod
   def with_wavenumbers(

@@ -124,56 +124,6 @@ def real_basis_derivative_with_zero_imag(
   return j * jnp.where((i + 1) % 2, u_down, -u_up)
 
 
-def complex_basis(wavenumbers: int, nodes: int) -> np.ndarray:
-  """Returns the complex-valued Fourier Basis.
-
-  Args:
-    wavenumbers: number of wavenumbers.
-    nodes: number of equally spaced nodes in the range [0, 2π). Must satisfy
-      wavenumbers >= nodes.
-
-  Returns:
-    The nodes x wavenumbers matrix F, such that
-
-      F[j, k] = exp(2πi * jk / nodes) / √2π
-
-    i.e., the columns of F are the complex Fourier basis functions evenly
-    spaced points.
-
-    The normalization of the basis functions is chosen such that they have unit
-    L²([0, 2π]) norm.
-  """
-  if wavenumbers > nodes // 2 + 1:
-    raise ValueError(
-        '`wavenumbers` must be no greater than `nodes // 2 + 1`;'
-        f'got wavenumbers = {wavenumbers}, nodes = {nodes}.'
-    )
-  basis = scipy.linalg.dft(nodes).conj()[:, :wavenumbers] / np.sqrt(np.pi)
-  basis[:, 0] /= np.sqrt(2)
-  return basis
-
-
-def complex_basis_derivative(
-    u: jnp.ndarray | jax.Array, axis: int = -1
-) -> jax.Array:
-  """Calculate the derivative of a signal using a complex basis.
-
-  Args:
-    u: signal to differentiate, in the real Fourier basis.
-    axis: the axis along which the transform will be applied.
-
-  Returns:
-    The derivative of `u` along `axis`. In particular, if
-    `u_x = complex_basis_derivative(u)`:
-
-      u_x[..., k] = i * k * u[..., k]
-  """
-  if axis >= 0:
-    raise ValueError('axis must be negative')
-  k = jnp.arange(u.shape[axis]).reshape((-1,) + (1,) * (-1 - axis))
-  return 1j * k * u
-
-
 def quadrature_nodes(nodes: int) -> tuple[np.ndarray, np.ndarray]:
   """Returns nodes and weights for the trapezoidal rule.
 

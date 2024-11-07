@@ -36,11 +36,6 @@ class CoordinateSystemTest(parameterized.TestCase):
           horizontal=spherical_harmonic.Grid.T21(),
           vertical=sigma_coordinates.SigmaCoordinates.equidistant(6)),
       dict(
-          horizontal=spherical_harmonic.Grid.T21(
-              spherical_harmonics_impl=spherical_harmonic.ComplexSphericalHarmonics
-          ),
-          vertical=sigma_coordinates.SigmaCoordinates.equidistant(8)),
-      dict(
           horizontal=spherical_harmonic.Grid.T21(),
           vertical=layer_coordinates.LayerCoordinates(5)),
   )

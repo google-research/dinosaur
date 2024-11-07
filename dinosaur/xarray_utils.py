@@ -150,7 +150,7 @@ GRID_REGISTRY = {
     'RealSphericalHarmonicsWithZeroImag': (
         spherical_harmonic.RealSphericalHarmonicsWithZeroImag
     ),
-    'ComplexSphericalHarmonics': spherical_harmonic.ComplexSphericalHarmonics,
+    'FastSphericalHarmonics': spherical_harmonic.FastSphericalHarmonics,
 }
 
 

@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""Tests for fourier."""
 import itertools
 
 from absl.testing import absltest
@@ -66,49 +64,6 @@ class RealFourierTest(parameterized.TestCase):
     _, w = fourier.quadrature_nodes(nodes)
     eye = np.eye(2 * wavenumbers - 1)
     np.testing.assert_allclose((f.T * w).dot(f), eye, atol=1e-12)
-
-
-class ComplexFourierTest(parameterized.TestCase):
-
-  @parameterized.parameters(
-      dict(wavenumbers=4, nodes=7),
-      dict(wavenumbers=11, nodes=21),
-      dict(wavenumbers=32, nodes=63),
-  )
-  def testBasis(self, wavenumbers, nodes):
-    f = fourier.complex_basis(wavenumbers, nodes)
-    for j, k in itertools.product(range(nodes), range(wavenumbers)):
-      normalization = np.sqrt(np.pi)
-      if k == 0:
-        normalization *= np.sqrt(2)
-      expected = np.exp(2 * np.pi * 1j * j * k / nodes) / normalization
-      np.testing.assert_allclose(f[j, k], expected, atol=1e-12)
-
-  @parameterized.parameters(
-      dict(wavenumbers=4, seed=0),
-      dict(wavenumbers=11, seed=0),
-      dict(wavenumbers=32, seed=0),
-  )
-  def testDerivatives(self, wavenumbers, seed):
-    f = np.random.RandomState(seed).normal(size=[wavenumbers])
-    f_x = fourier.complex_basis_derivative(f)
-    for k in range(wavenumbers):
-      np.testing.assert_allclose(f_x[k], 1j * k * f[k])
-
-  @parameterized.parameters(
-      dict(wavenumbers=4),
-      dict(wavenumbers=16),
-      dict(wavenumbers=256),
-  )
-  def testNormalized(self, wavenumbers):
-    """Tests that the basis functions are normalized on [0, 2π]."""
-    nodes = 2 * wavenumbers - 1
-    f = fourier.complex_basis(wavenumbers, nodes)
-    _, w = fourier.quadrature_nodes(nodes)
-    expected = 2 * np.eye(wavenumbers)
-    expected[0, 0] = 1
-    norms = (f.T.conj() * w).dot(f)
-    np.testing.assert_allclose(norms, expected, atol=1e-12)
 
 
 if __name__ == '__main__':
