@@ -15,7 +15,7 @@
 """Code for describing units and non-dimensionalizing quantities."""
 
 from collections import abc
-from typing import Iterator
+from typing import Iterator, Protocol
 
 import jax.numpy as jnp
 import numpy as np
@@ -102,6 +102,18 @@ def _get_dimension(quantity: Quantity) -> str:
     raise ValueError('All scales must describe a single dimension;'
                      f'got dimensionality {quantity.dimensionality}')
   return str(quantity.dimensionality)
+
+
+class ScaleProtocol(Protocol):
+  """A protocol class for `Scale` objects that perform nondimensionalization."""
+
+  def nondimensionalize(self, quantity: Quantity) -> Numeric:
+    """Converts a `pint.Quantity` to a non-dimensional value."""
+    ...
+
+  def dimensionalize(self, value: Numeric, unit: Unit) -> Quantity:
+    """Converts non-dimensional `value` to a `pint.Quantity` with `unit`."""
+    ...
 
 
 class Scale(abc.Mapping):

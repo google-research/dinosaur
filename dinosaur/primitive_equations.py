@@ -276,8 +276,8 @@ class PrimitiveEquationsSpecs:
     water_vapor_gas_constant: the non-dimensionalized gas constant for vapor.
     water_vapor_isobaric_heat_capacity: isobaric heat capacity of vapor.
     kappa: `ideal_gas_constant / Cp` where  Cp is the isobaric heat capacity.
-    scale: an instance of `Scale` that will be used to (non-)dimensionalize
-      quantities.
+    scale: an instance implementing `ScaleProtocol` that will be used to
+      (non-)dimensionalize quantities.
   """
 
   radius: float
@@ -287,7 +287,7 @@ class PrimitiveEquationsSpecs:
   water_vapor_gas_constant: float
   water_vapor_isobaric_heat_capacity: float
   kappa: float
-  scale: scales.Scale
+  scale: scales.ScaleProtocol
 
   @property
   def R(self) -> float:
@@ -348,7 +348,7 @@ class PrimitiveEquationsSpecs:
       water_vapor_gas_constant_si: Quantity = scales.IDEAL_GAS_CONSTANT_H20,
       water_vapor_isobaric_heat_capacity_si: Quantity = scales.WATER_VAPOR_CP,
       kappa_si: Quantity = scales.KAPPA,
-      scale: scales.Scale = scales.DEFAULT_SCALE,
+      scale: scales.ScaleProtocol = scales.DEFAULT_SCALE,
   ) -> PrimitiveEquationsSpecs:
     """Constructs `PrimitiveEquantionSpecs` from SI constants."""
     return cls(

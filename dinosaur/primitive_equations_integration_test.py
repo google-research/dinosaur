@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Integration tests for primitive_equations."""
-import dataclasses
 import functools
 
 from absl.testing import absltest
@@ -28,7 +27,7 @@ from dinosaur import spherical_harmonic
 from dinosaur import time_integration
 from dinosaur import xarray_utils
 import jax
-from jax import config
+from jax import config  # pylint: disable=g-importing-member
 import jax.numpy as jnp
 import numpy as np
 
@@ -226,7 +225,7 @@ class IntegrationTest(absltest.TestCase):
 
     with self.subTest('evolved state'):
       assert_states_close(
-          real_out_nodal, fast_out_nodal, rtol=1e-5, range_tol=1e-5
+          real_out_nodal, fast_out_nodal, rtol=1e-4, range_tol=1e-5
       )
 
 

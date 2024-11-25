@@ -76,14 +76,14 @@ class ShallowWaterSpecs:
       domain.
     gravity_acceleration: the non-dimensionalized value of gravitational
       acceleration.
-    scale: an instance of `Scale` that will be used to (non-)dimensionalize
-      quantities.
+    scale: an instance implementing `ScaleProtocol` that will be used to
+      (non-)dimensionalize quantities.
   """
   densities: Array
   radius: float
   angular_velocity: float
   gravity_acceleration: float
-  scale: scales.Scale
+  scale: scales.ScaleProtocol
 
   @property
   def g(self) -> float:
@@ -110,7 +110,7 @@ class ShallowWaterSpecs:
       radius_si: Quantity = scales.RADIUS,
       angular_velocity_si: Quantity = scales.ANGULAR_VELOCITY,
       gravity_acceleration_si: Quantity = scales.GRAVITY_ACCELERATION,
-      scale: scales.Scale = scales.DEFAULT_SCALE) -> ShallowWaterSpecs:
+      scale: scales.ScaleProtocol = scales.DEFAULT_SCALE) -> ShallowWaterSpecs:
     """Constructs `ShallowWaterSpecs` from SI constants."""
     return cls(scale.nondimensionalize(densities),
                scale.nondimensionalize(radius_si),
