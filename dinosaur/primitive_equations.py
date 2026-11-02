@@ -2319,7 +2319,9 @@ def compute_diagnostic_state_hybrid(
   )
   # M_{k+1/2} = - sum_{r=1}^k D_r + B_{k+1/2} sum_{r=1}^N D_r
   sum_d = jnp.sum(d_k, axis=0, keepdims=True)
-  cumsum_d = jax_numpy_utils.cumsum(d_k, axis=0)
+  cumsum_d = jax_numpy_utils.cumsum(
+      d_k, axis=0, sharding=coords.dycore_sharding
+  )
   # pad top with 0
   cumsum_d_padded = jnp.pad(cumsum_d, ((1, 0), (0, 0), (0, 0)))
   b_boundaries = coords.vertical.b_boundaries[:, np.newaxis, np.newaxis]  # pyrefly: ignore[missing-attribute]
@@ -3095,7 +3097,7 @@ class PrimitiveEquationsHybrid(PrimitiveEquationsBase):
         self.nondim_levels,
         self.physics_specs.R,
         self.p_s_ref,
-        method='dense',
+        method=self._resolved_vertical_matmul_method(),
         sharding=self.coords.dycore_sharding,
     )
     geopotential_tendency_residual = -self.coords.horizontal.laplacian(
@@ -3296,7 +3298,7 @@ class PrimitiveEquationsHybrid(PrimitiveEquationsBase):
         self.nondim_levels,
         self.physics_specs.R,
         self.p_s_ref,
-        method='dense',
+        method=self._resolved_vertical_matmul_method(),
         sharding=self.coords.dycore_sharding,
     )
     geopotential_tendency_residual = -self.coords.horizontal.laplacian(
